@@ -1,4 +1,4 @@
-"""WiFi Dynamic slice quantum Primitive."""
+"""WiFi Nwtwork Statistics Primitive."""
 
 import time
 import math
@@ -14,6 +14,8 @@ from empower.core.ssid import WIFI_NWID_MAXSIZE
 from empower.core.etheraddress import EtherAddress
 from empower.managers.ranmanager.lvapp.wifiapp import EWiFiApp
 from empower.core.app import EVERY
+
+from empower.apps.wifinetworkstats.lvaprcstats import LvapRCStats
 
 
 PT_BIN_COUNTERS_REQUEST = 0x82
@@ -88,21 +90,59 @@ WIFI_SLICE_STATS_RESPONSE = Struct(
 )
 WIFI_SLICE_STATS_RESPONSE.name = "wifi_slice_stats_response"
 
+PT_WIFI_RC_STATS_REQUEST = 0x80
+PT_WIFI_RC_STATS_RESPONSE = 0x81
+
+WIFI_RC_STATS_REQUEST = Struct(
+    "version" / Int8ub,
+    "type" / Int8ub,
+    "length" / Int32ub,
+    "seq" / Int32ub,
+    "xid" / Int32ub,
+    "device" / Bytes(6),
+    "sta" / Bytes(6),
+)
+WIFI_RC_STATS_REQUEST.name = "wifi_rc_stats_request"
+
+RC_ENTRY = Struct(
+    "rate" / Int8ub,
+    "prob" / Int32ub,
+    "cur_prob" / Int32ub,
+    "cur_tp" / Int32ub,
+    "last_attempts" / Int32ub,
+    "last_successes" / Int32ub,
+    "hist_attempts" / Int32ub,
+    "hist_successes" / Int32ub
+)
+RC_ENTRY.name = "rc_entry"
+
+WIFI_RC_STATS_RESPONSE = Struct(
+    "version" / Int8ub,
+    "type" / Int8ub,
+    "length" / Int32ub,
+    "seq" / Int32ub,
+    "xid" / Int32ub,
+    "device" / Bytes(6),
+    "iface_id" / Int32ub,
+    "sta" / Bytes(6),
+    "nb_entries" / Int16ub,
+    "stats" / Array(lambda ctx: ctx.nb_entries, RC_ENTRY),
+)
+WIFI_RC_STATS_RESPONSE.name = "wifi_rc_stats_response"
+
 class NetworkStats(EWiFiApp):
     """WiFi Netork Statistics Primitive.
 
-    This primitive collects the slice statistics.
+    This primitive collects the network statistics.
 
     Parameters:
-        slice_id: the slice to track (optinal, default 0)
         every: the loop period in ms (optional, default 2000ms)
 
     Example:
         POST /api/v1/projects/52313ecb-9d00-4b7d-b873-b55d3d9ada26/apps
         {
-            "name": "empower.apps.wifislicestats.wifislicestats",
+            "name": "empower.apps.wifinetworkstats.wifinetworkstats",
             "params": {
-                "slice_id": 0,
                 "every": 2000
             }
         }
@@ -119,6 +159,8 @@ class NetworkStats(EWiFiApp):
         lvapp.register_message(PT_WIFI_SLICE_STATS_RESPONSE, WIFI_SLICE_STATS_RESPONSE)
         lvapp.register_message(PT_BIN_COUNTERS_REQUEST, BIN_COUNTERS_REQUEST)
         lvapp.register_message(PT_BIN_COUNTERS_RESPONSE, BIN_COUNTERS_RESPONSE)
+        lvapp.register_message(PT_WIFI_RC_STATS_REQUEST, WIFI_RC_STATS_REQUEST)
+        lvapp.register_message(PT_WIFI_RC_STATS_RESPONSE, WIFI_RC_STATS_RESPONSE)
 
         # Data structures
         self.stats = {}
@@ -132,26 +174,46 @@ class NetworkStats(EWiFiApp):
             "tx_bps": 0,
             "rx_bps": 0
         }
+        self.rates = {}
 
         self.lvap_counters = {}
+        self.lvap_rates = {}
         for sta in self.context.lvaps:
             sta = sta.to_str()
-            self.lvap_counters[sta] = self.counters
+            self.lvap_counters[sta] = self.counters.copy()
+            self.lvap_rates[sta] = self.rates.copy()
         
         self.slice_stats = {}
         for slc in self.context.wifi_slices:
-            self.slice_stats[slc] = self.stats
+            self.slice_stats[slc] = self.stats.copy()
 
         # Last seen time
         self.last = None
         self.lvap_last = {}
 
-        # My LVAPS 
-        # TODO Leer estas lvaps de una base da datos ?
+        # Best prob and rate
+        self.best_prob = None
+        self.best_tp = None
+        self.lvap_best_prob = {}
+        self.lvap_best_tp = {}
+
+        # TODO sacar este for y agregalro al de lvaps de arriba
+        for sta in self.context.lvaps:
+            sta = sta.to_str()
+            self.lvap_last[sta] = self.last
+            self.lvap_best_prob[sta] = self.best_prob
+            self.lvap_best_tp[sta] = self.best_tp
+
+        # Lvap RC Stats classes
+        self.rc_stats_classes = {}
+
+        # TODO ---- VER SI ES NECESARIO HACER UN COPY CUANDO USAMOS OBJETOS JSON
+
+        # My LVAPS
         self.sta = EtherAddress("D8:CE:3A:8F:0B:4D")
 
     def __eq__(self, other):
-        if isinstance(other, HelloWorld):
+        if isinstance(other, NetworkStats):
             return self.every == other.every
         return False
 
@@ -162,6 +224,7 @@ class NetworkStats(EWiFiApp):
         out['stats'] = self.slice_stats
         #out['sta'] = self.sta
         out['counters'] = self.lvap_counters
+        out['rates'] = self.lvap_rates
 
         return out
 
@@ -171,12 +234,26 @@ class NetworkStats(EWiFiApp):
 
             lvap = self.context.lvaps[sta]
 
+            # If lvap not in rc classes, create a new one
+            sta = sta.to_str()
+            if sta not in self.rc_stats_classes:
+                self.rc_stats_classes[sta] = LvapRCStats(sta, lvap)
+
+            self.rc_stats_classes[sta].send_request(lvap)
+
             msg = Container(length=BIN_COUNTERS_REQUEST.sizeof(),
                             sta=lvap.addr.to_raw())
 
             lvap.wtp.connection.send_message(PT_BIN_COUNTERS_REQUEST,
                                             msg,
                                             self.handle_lvap_response)
+
+            # msg = Container(length=WIFI_RC_STATS_REQUEST.sizeof(),
+            #                 sta=lvap.addr.to_raw())
+
+            # lvap.wtp.connection.send_message(PT_WIFI_RC_STATS_REQUEST,
+            #                                 msg,
+            #                                 self.handle_rc_response)
 
         for slc in self.context.wifi_slices:
             for wtp in self.wtps.values():
@@ -275,9 +352,9 @@ class NetworkStats(EWiFiApp):
         self.lvap_counters[sta]["tx_pps"] = 0
         self.lvap_counters[sta]["rx_pps"] = 0
 
-        if self.last:
+        if self.lvap_last[sta]:
 
-            delta = time.time() - self.last
+            delta = time.time() - self.lvap_last[sta]
 
             self.lvap_counters[sta]["tx_bps"] = \
                 self.update_stats(delta, old_tx_bytes, self.lvap_counters[sta]["tx_bytes"])
@@ -325,7 +402,10 @@ class NetworkStats(EWiFiApp):
         self.handle_callbacks()
 
         # set last iteration time
-        self.last = time.time()
+        self.lvap_last[sta] = time.time()
+
+        # handle rc stats response
+        self.handle_class_rc_response(sta)
 
 
     def handle_slice_stats_response(self, response, *_):
@@ -371,6 +451,76 @@ class NetworkStats(EWiFiApp):
         # handle callbacks
         self.handle_callbacks()
 
+    def handle_rc_response(self, response, *_):
+        """Handle WIFI_RC_STATS_RESPONSE message."""
+
+        # get lvap mac address
+        sta = EtherAddress(response.sta)
+        sta = sta.to_str()
+
+        lvap = self.context.lvaps[sta]
+
+        # update this object
+        self.lvap_rates[sta] = {}
+        self.lvap_best_prob[sta] = None
+        self.lvap_best_tp[sta] = None
+
+        # generate data points
+        points = []
+        timestamp = datetime.utcnow()
+
+        for entry in response.stats:
+
+            rate = entry.rate if lvap.ht_caps else entry.rate / 2.0
+
+            fields = {
+                'prob': entry.prob / 180.0,
+                'cur_prob': entry.cur_prob / 180.0,
+                'cur_tp': entry.cur_tp / ((18000 << 10) / 96) / 10,
+                'last_attempts': entry.last_attempts,
+                'last_successes': entry.last_successes,
+                'hist_attempts': entry.hist_attempts,
+                'hist_successes': entry.hist_successes,
+            }
+
+            tags = dict(self.params)
+            tags["rate"] = rate
+
+            self.lvap_rates[sta][rate] = fields
+
+            sample = {
+                "measurement": self.name,
+                "tags": tags,
+                "time": timestamp,
+                "fields": fields
+            }
+
+            points.append(sample)
+
+            # compute statistics
+            self.lvap_best_prob[sta] = \
+                max(self.rates.keys(), key=(lambda key: self.rates[key]['prob']))
+
+            self.lvap_best_tp[sta] = \
+                max(self.lvap_rates[sta].keys(), key=(lambda key: self.lvap_rates[sta][key]['cur_tp']))
+
+            # save to db
+            # self.write_points(points)
+
+            # handle callbacks
+            self.handle_callbacks()
+
+    def handle_class_rc_response(self, sta):
+        # update this object
+        self.lvap_rates[sta] = {}
+        self.lvap_best_prob[sta] = None
+        self.lvap_best_tp[sta] = None
+
+        resp = self.rc_stats_classes[sta].to_dict()
+        
+        self.lvap_rates[sta] = resp['rates']
+        self.lvap_best_prob[sta] = resp['best_prob']
+        self.lvap_best_tp[sta] = resp['best_tp']
 
 def launch(context, service_id, every=EVERY):
     """ Initialize the module. """
