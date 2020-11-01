@@ -374,14 +374,14 @@ class NetworkStats(EWiFiApp):
 
         fields = {
             "sta": sta,
-            "tx_bytes": self.lvap_counters[sta]["tx_bytes"],
-            "rx_bytes": self.lvap_counters[sta]["rx_bytes"],
-            "tx_packets": self.lvap_counters[sta]["tx_packets"],
-            "rx_packets": self.lvap_counters[sta]["rx_packets"],
-            "tx_bps": self.lvap_counters[sta]["tx_bps"],
-            "rx_bps": self.lvap_counters[sta]["rx_bps"],
-            "tx_pps": self.lvap_counters[sta]["tx_pps"],
-            "rx_pps": self.lvap_counters[sta]["rx_pps"]
+            "tx_bytes": float(self.lvap_counters[sta]["tx_bytes"]),
+            "rx_bytes": float(self.lvap_counters[sta]["rx_bytes"]),
+            "tx_packets": float(self.lvap_counters[sta]["tx_packets"]),
+            "rx_packets": float(self.lvap_counters[sta]["rx_packets"]),
+            "tx_bps": float(self.lvap_counters[sta]["tx_bps"]),
+            "rx_bps": float(self.lvap_counters[sta]["rx_bps"]),
+            "tx_pps": float(self.lvap_counters[sta]["tx_pps"]),
+            "rx_pps": float(self.lvap_counters[sta]["rx_pps"])
         }
 
         tags = dict(self.params)
