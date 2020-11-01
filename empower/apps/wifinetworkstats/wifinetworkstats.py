@@ -373,15 +373,15 @@ class NetworkStats(EWiFiApp):
         timestamp = datetime.utcnow()
 
         fields = {
-            "sta": self.sta,
-            "tx_bytes": self.counters["tx_bytes"],
-            "rx_bytes": self.counters["rx_bytes"],
-            "tx_packets": self.counters["tx_packets"],
-            "rx_packets": self.counters["rx_packets"],
-            "tx_bps": self.counters["tx_bps"],
-            "rx_bps": self.counters["rx_bps"],
-            "tx_pps": self.counters["tx_pps"],
-            "rx_pps": self.counters["rx_pps"]
+            "sta": sta,
+            "tx_bytes": self.lvap_counters[sta]["tx_bytes"],
+            "rx_bytes": self.lvap_counters[sta]["rx_bytes"],
+            "tx_packets": self.lvap_counters[sta]["tx_packets"],
+            "rx_packets": self.lvap_counters[sta]["rx_packets"],
+            "tx_bps": self.lvap_counters[sta]["tx_bps"],
+            "rx_bps": self.lvap_counters[sta]["rx_bps"],
+            "tx_pps": self.lvap_counters[sta]["tx_pps"],
+            "rx_pps": self.lvap_counters[sta]["rx_pps"]
         }
 
         tags = dict(self.params)
