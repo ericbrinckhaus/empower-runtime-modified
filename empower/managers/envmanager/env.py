@@ -73,6 +73,12 @@ class Env(MongoModel):
         ts_manager = srv_or_die("tsmanager")
         ts_manager.write_points(points)
 
+    def query(self, query):
+        """Do a query to time-series manager."""
+
+        ts_manager = srv_or_die("tsmanager")
+        return ts_manager.query(query)
+
     def save_service_state(self, service_id):
         """Save service state."""
 

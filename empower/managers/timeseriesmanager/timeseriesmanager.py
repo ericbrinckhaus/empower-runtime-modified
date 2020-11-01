@@ -163,6 +163,14 @@ class InfluxTimeSeriesManager(EService):
 
         return False
 
+    def query(self, query):
+        try:
+            result = self.influxdb_client.query(query)
+            return result
+        except Exception as ex:
+            self.log.exception(ex)
+            return ''
+
 
 def launch(context, service_id, database=DEFAULT_DATABASE,
            host=DEFAULT_HOST, port=DEFAULT_PORT, username=DEFAULT_USERNAME,

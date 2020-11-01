@@ -231,6 +231,11 @@ class EService:
 
         self.context.write_points(points)
 
+    def query(self, query):
+        """Do a query to context."""
+
+        return self.context.query(query)
+
     def start(self):
         """Start control loop."""
 

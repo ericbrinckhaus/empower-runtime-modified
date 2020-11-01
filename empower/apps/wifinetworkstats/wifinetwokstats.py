@@ -369,34 +369,34 @@ class NetworkStats(EWiFiApp):
                 self.update_stats(delta, old_rx_packets, self.lvap_counters[sta]["rx_packets"])
 
         # generate data points
-        # points = []
-        # timestamp = datetime.utcnow()
+        points = []
+        timestamp = datetime.utcnow()
 
-        # fields = {
-        #     "sta": self.sta,
-        #     "tx_bytes": self.counters["tx_bytes"],
-        #     "rx_bytes": self.counters["rx_bytes"],
-        #     "tx_packets": self.counters["tx_packets"],
-        #     "rx_packets": self.counters["rx_packets"],
-        #     "tx_bps": self.counters["tx_bps"],
-        #     "rx_bps": self.counters["rx_bps"],
-        #     "tx_pps": self.counters["tx_pps"],
-        #     "rx_pps": self.counters["rx_pps"]
-        # }
+        fields = {
+            "sta": self.sta,
+            "tx_bytes": self.counters["tx_bytes"],
+            "rx_bytes": self.counters["rx_bytes"],
+            "tx_packets": self.counters["tx_packets"],
+            "rx_packets": self.counters["rx_packets"],
+            "tx_bps": self.counters["tx_bps"],
+            "rx_bps": self.counters["rx_bps"],
+            "tx_pps": self.counters["tx_pps"],
+            "rx_pps": self.counters["rx_pps"]
+        }
 
-        # tags = dict(self.params)
+        tags = dict(self.params)
 
-        # sample = {
-        #     "measurement": self.name,
-        #     "tags": tags,
-        #     "time": timestamp,
-        #     "fields": fields
-        # }
+        sample = {
+            "measurement": 'lvap_counters_stats',
+            "tags": tags,
+            "time": timestamp,
+            "fields": fields
+        }
 
-        # points.append(sample)
+        points.append(sample)
 
-        # # save to db
-        # self.write_points(points)
+        # save to db
+        self.write_points(points)
 
         # handle callbacks
         self.handle_callbacks()
@@ -406,6 +406,12 @@ class NetworkStats(EWiFiApp):
 
         # handle rc stats response
         self.handle_class_rc_response(sta)
+
+
+        query = 'select * from lvap_counters_stats;'
+        result = self.query(query)
+        print('*********** QUERY **********')
+        print(result)
 
 
     def handle_slice_stats_response(self, response, *_):
