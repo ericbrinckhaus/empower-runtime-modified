@@ -520,17 +520,24 @@ class NetworkStats(EWiFiApp):
         # generate data points
         points = []
         timestamp = datetime.utcnow()
-        tags = {}
-        tags["sta"] = sta
 
-        sample = {
-            "measurement": "lvap_rc_stats",
-            "tags": tags,
-            "time": timestamp,
-            "fields": self.lvap_rates[sta]
-        }
+        for rate in resp['rates'].keys():
+            
+            tags = dict(self.params)
+            tags["sta"] = sta
+            tags["rate"] = rate
 
-        points.append(sample)
+            sample = {
+                "measurement": "lvap_rc_stats",
+                "tags": tags,
+                "time": timestamp,
+                "fields": resp['rates'][rate]
+            }
+
+            points.append(sample)
+
+        # save to db
+        self.write_points(points)
 
 def launch(context, service_id, every=EVERY):
     """ Initialize the module. """

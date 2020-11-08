@@ -61,6 +61,35 @@ class NetworkManager(EWiFiApp):
 
     def checkNetworkSlices(self):
         query = 'select * from slices_rates order by time desc limit 1;'
+        resultRates = self.query(query)
+        query = 'select * from lvap_slice order by time desc limit 1;'
+        resultSlices = self.query(query)
+        if len(list(resultRates.get_points())):
+            slices = list(resultRates.get_points())[0]
+            for slc in slices.keys():
+                rate = slices[slc]
+                if len(list(resultSlices.get_points())):
+                    lvaps = list(resultSlices.get_points())[slc]
+                    if len(lvaps):
+                        for lvap in lvaps:
+                            # do algorithm
+                            self.decide(rate, lvap, slc)
+                    else:
+                        print("Slice {0} doesnt have any lvap", slc)
+                else:
+                    print ("No Slice-Lvap data")    
+        else:
+            print("No Slice-Rate data")
+
+    def decide(self, rate, lvap, slc):
+        lvap = '6C:C7:EC:98:16:65'
+        query = 'select * from lvap_rc_stats where sta=\'' + lvap + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
         result = self.query(query)
-        print('*********** QUERY **********')
-        print(result)
+        rates_list = list(result.get_points())
+        print('********* QUERY ***********')
+        print(rates_list)
+
+def launch(context, service_id, every=EVERY):
+    """ Initialize the module. """
+
+    return NetworkManager(context=context, service_id=service_id, every=every)
