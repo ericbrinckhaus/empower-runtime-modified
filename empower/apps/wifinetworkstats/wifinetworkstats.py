@@ -207,11 +207,6 @@ class NetworkStats(EWiFiApp):
         # Lvap RC Stats classes
         self.rc_stats_classes = {}
 
-        # TODO ---- VER SI ES NECESARIO HACER UN COPY CUANDO USAMOS OBJETOS JSON
-
-        # My LVAPS
-        self.sta = EtherAddress("D8:CE:3A:8F:0B:4D")
-
     def __eq__(self, other):
         if isinstance(other, NetworkStats):
             return self.every == other.every
@@ -408,12 +403,6 @@ class NetworkStats(EWiFiApp):
         self.handle_class_rc_response(sta)
 
 
-        query = 'select * from lvap_counters_stats;'
-        result = self.query(query)
-        print('*********** QUERY **********')
-        print(result)
-
-
     def handle_slice_stats_response(self, response, *_):
         """Handle WIFI_SLICE_STATS_RESPONSE message."""
 
@@ -432,10 +421,10 @@ class NetworkStats(EWiFiApp):
         for entry in response.stats:
 
             self.slice_stats[slc][wtp][entry.iface_id] = {
-                'deficit_used': entry.deficit_used,
-                'max_queue_length': entry.max_queue_length,
-                'tx_packets': entry.tx_packets,
-                'tx_bytes': entry.tx_bytes,
+                'deficit_used': float(entry.deficit_used),
+                'max_queue_length': float(entry.max_queue_length),
+                'tx_packets': float(entry.tx_packets),
+                'tx_bytes': float(entry.tx_bytes),
             }
 
             tags = dict(self.params)
@@ -443,7 +432,7 @@ class NetworkStats(EWiFiApp):
             tags["iface_id"] = entry.iface_id
 
             sample = {
-                "measurement": self.name,
+                "measurement": "wifi_slice_stats",
                 "tags": tags,
                 "time": timestamp,
                 "fields": self.slice_stats[slc][wtp][entry.iface_id]
@@ -452,7 +441,7 @@ class NetworkStats(EWiFiApp):
             points.append(sample)
 
         # save to db
-        # self.write_points(points)
+        self.write_points(points)
 
         # handle callbacks
         self.handle_callbacks()
@@ -527,6 +516,21 @@ class NetworkStats(EWiFiApp):
         self.lvap_rates[sta] = resp['rates']
         self.lvap_best_prob[sta] = resp['best_prob']
         self.lvap_best_tp[sta] = resp['best_tp']
+
+        # generate data points
+        points = []
+        timestamp = datetime.utcnow()
+        tags = {}
+        tags["sta"] = sta
+
+        sample = {
+            "measurement": "lvap_rc_stats",
+            "tags": tags,
+            "time": timestamp,
+            "fields": self.lvap_rates[sta]
+        }
+
+        points.append(sample)
 
 def launch(context, service_id, every=EVERY):
     """ Initialize the module. """

@@ -157,7 +157,7 @@ class LvapRCStats():
                 'hist_attempts': entry.hist_attempts,
                 'hist_successes': entry.hist_successes,
             }
-
+            
             self.rates[rate] = fields
 
         # compute statistics
