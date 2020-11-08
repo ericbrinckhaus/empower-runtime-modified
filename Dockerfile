@@ -14,14 +14,6 @@ RUN pip3 install tornado==6.0.4 construct==2.10.56 pymodm==0.4.3 influxdb==5.3.0
 RUN pip3 install requests==2.23.0
 RUN pip3 install empower-core==1.0.5
 
-# Fetching the latest repository from empower-runtime
-RUN wget https://github.com/ericbrinckhaus/empower-runtime-modified/archive/main.zip
-RUN unzip main.zip
-RUN rm main.zip
-RUN ln -sf /empower-runtime-modified-main/conf/ /etc/empower
-RUN mkdir -p /var/www/
-RUN ln -s /empower-runtime-modified-main/webui/ /var/www/empower
-
 # Install vim
 RUN apt-get update
 RUN apt-get -y install vim
@@ -41,6 +33,15 @@ RUN curl -sL https://repos.influxdata.com/influxdb.key | apt-key add -
 RUN . /etc/lsb-release
 RUN echo "deb https://repos.influxdata.com/${DISTRIB_ID,,} ${DISTRIB_CODENAME} stable" | tee /etc/apt/sources.list.d/influxdb.list
 RUN apt-get -y install influxdb
+
+ARG CACHE_DATE=2020-10-10
+# Fetching the latest repository from empower-runtime
+RUN wget https://github.com/ericbrinckhaus/empower-runtime-modified/archive/main.zip
+RUN unzip main.zip
+RUN rm main.zip
+RUN ln -sf /empower-runtime-modified-main/conf/ /etc/empower
+RUN mkdir -p /var/www/
+RUN ln -s /empower-runtime-modified-main/webui/ /var/www/empower
 
 # Create start up script entrypoint
 RUN echo "cd empower-runtime-modified-main\nsystemctl enable mongod.service\nsystemctl start mongod.service\nservice influxdb start\npython3 empower-runtime.py" > entry.sh
