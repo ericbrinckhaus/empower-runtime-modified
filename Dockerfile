@@ -1,4 +1,4 @@
-## build : docker build -t empower-runtime2 .
+## build : docker build --build-arg CACHE_DATE="$(date)" -t empower-runtime2 .
 ## run :   docker run --net=host --rm --privileged -it empower-runtime2
 ## after run : apt install -y mongodb-org
 ## after run : /bin/sh entry.sh 

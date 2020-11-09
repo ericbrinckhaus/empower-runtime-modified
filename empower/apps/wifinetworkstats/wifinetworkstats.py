@@ -368,7 +368,6 @@ class NetworkStats(EWiFiApp):
         timestamp = datetime.utcnow()
 
         fields = {
-            "sta": sta,
             "tx_bytes": float(self.lvap_counters[sta]["tx_bytes"]),
             "rx_bytes": float(self.lvap_counters[sta]["rx_bytes"]),
             "tx_packets": float(self.lvap_counters[sta]["tx_packets"]),
@@ -380,6 +379,7 @@ class NetworkStats(EWiFiApp):
         }
 
         tags = dict(self.params)
+        tags["sta"] = sta
 
         sample = {
             "measurement": 'lvap_counters_stats',
