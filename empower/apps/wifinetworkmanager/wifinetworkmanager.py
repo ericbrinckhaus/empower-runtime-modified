@@ -70,7 +70,8 @@ class NetworkManager(EWiFiApp):
             for slc in slices.keys():
                 rate = slices[slc]
                 if len(list(resultSlices.get_points())):
-                    lvaps = list(resultSlices.get_points())[slc]
+                    datos_slices = list(resultSlices.get_points())[0]
+                    lvaps = datos_slices[slc]
                     if len(lvaps):
                         for lvap in lvaps:
                             # do algorithm
