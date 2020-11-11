@@ -72,18 +72,19 @@ class NetworkManager(EWiFiApp):
                 if len(list(resultSlices.get_points())):
                     lvaps = list(resultSlices.get_points())[0]
                     if len(lvaps):
-                        for lvap in lvaps:
+                        for lvap in lvaps.keys():
+                            if lvap == 'time' or lvap == 'slice':
+                                continue
                             # do algorithm
-                            self.decide(rate, lvap, slc)
+                            self.decide(rate, lvaps[lvap], slc)
                     else:
-                        print("Slice {0} doesnt have any lvap", slc)
+                        print("Slice {} doesnt have any lvap".format(slc))
                 else:
                     print ("No Slice-Lvap data")    
         else:
             print("No Slice-Rate data")
 
     def decide(self, rate, lvap, slc):
-        lvap = '6C:C7:EC:98:16:65'
         # obtengo las stats de rate control desde la ultima vez que pregunte
         query = 'select * from lvap_rc_stats where sta=\'' + lvap + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
         result = self.query(query)
@@ -106,21 +107,21 @@ class NetworkManager(EWiFiApp):
                 counters = list(result.get_points())
                 tx_bps = 0
                 for counter in counters:
-                    tx_bps += counters[counter]
+                    tx_bps += counter.tx_bps
                 tx_bps = tx_bps / len(counters)
                 # Si esta por debajo del rate prometido entonces tengo que hacer algo
                 if (tx_bps < rate):
                     self.changeNetwork(lvap, slc, rate)
                 else:
-                    print("Lvap {0} is trying more bit rate than promised.", lvap)
+                    print("Lvap {} is trying more bit rate than promised.".format(lvap))
             else:
-                print("[OK] Lvap {0} has success rate of {1}.", lvap, success_rate)
+                print("[OK] Lvap {} has success rate of {}.".format(lvap, success_rate))
         else:
-            print("Lvap {0} is idle.", lvap)
+            print("Lvap {} is idle.".format(lvap))
 
     def changeNetwork(self, sta, slc, rate):
         # por ahora muevo al wtp con rssi mas cercano --- despues cambiar esto
-        lvap = self.context.lvaps[sta]
+        lvap = self.context.lvaps[EtherAddress(sta)]
         lvap.blocks = self.blocks().sort_by_rssi(lvap.addr).first()
 
     # iperf usa Mbits para medir el rate

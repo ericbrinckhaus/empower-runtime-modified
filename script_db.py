@@ -8,9 +8,9 @@ client = InfluxDBClient(host='localhost',
                         username='root',
                         password='password',
                         timeout=3,
-                        database='tsmanager')
+                        database='empower')
 
-client.create_database('tsmanager')
+client.create_database('empower')
 
 timestamp = datetime.utcnow()
 # slices_rates : <id_slice>: <rate>
