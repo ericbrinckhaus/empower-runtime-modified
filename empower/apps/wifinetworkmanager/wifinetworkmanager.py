@@ -41,6 +41,10 @@ class NetworkManager(EWiFiApp):
 
         # Data structures
         self.threshold = 0.75
+        self.RSSI_min = -50 # TODO ver valores de RSSI razonables
+        self.quantum_max = 15000
+        self.quantum_increase = 0.1
+        self.quantum_decrease = 0.1
         self.changes = {}
 
     def __eq__(self, other):
@@ -120,9 +124,145 @@ class NetworkManager(EWiFiApp):
             print("Lvap {} is idle.".format(lvap))
 
     def changeNetwork(self, sta, slc, rate):
-        # por ahora muevo al wtp con rssi mas cercano --- despues cambiar esto
+        if (self.try_handover(sta, slc, rate)):
+            print('Handover')
+        elif (self.try_change_quantum(sta, slc, rate)):
+            print('Quantum Change')
+        else:
+            print('No actions taken, network too busy')
+    
+    def try_handover(self, sta, slc, rate):
+        posibles_handovers = []
         lvap = self.context.lvaps[EtherAddress(sta)]
-        lvap.blocks = self.blocks().sort_by_rssi(lvap.addr).first()
+        blocks = self.blocks().sort_by_rssi(lvap.addr)
+        def filterBlocks(block):
+            if block.ucqm[lvap.addr]['mov_rssi'] > self.RSSI_min:
+                return True
+            else:
+                return False
+        # Filtramos los wtp que tengan malo RSSI
+        filtered_blocks = filter(filterBlocks, blocks)
+        for block in filtered_blocks:
+            query = 'select * from wifi_slice_stats where wtp=\'' + block.hwaddr() + '\' and slc=\'' + slc + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
+            result = self.query(query)
+            slice_stats = list(result.get_points())
+            print("************* WIFI SLICE STATS SLC--> {} ; WTP-->: {}:::: {}".format(slc, block.hwaddr(), slice_stats))
+            tx_bytes = 0
+            for stats in slice_stats:
+                tx_bytes += stats['tx_bytes']
+            tx_bps = tx_bytes / (self.every/1000)
+            # si el rate de la slice en el wtp es menor al rate prometido, es un candidato
+            if tx_bps < rate:
+                posibles_handovers.append({'block':block, 'rate':tx_bps})
+        if len(posibles_handovers) > 0:
+            def get_rate(blck):
+                return blck['rate']
+            # Ordeno los bloques por rate asi me quedo con el que tenga menos
+            posibles_handovers.sort(get_rate)
+            # Do Handover
+            lvap.blocks = posibles_handovers[0]['block']
+            return True
+        else:
+            return False
+
+    def try_change_quantum(self, sta, slc, rate):
+        lvap = self.context.lvaps[EtherAddress(sta)]
+        wtp = lvap.wtp.addr
+        actual_slice = self.context.wifi_slices[str(slc)]
+        wtp_quantum = actual_slice.properties['quantum']
+        if EtherAddress(wtp) not in actual_slice.properties['devices']:
+            wtp_quantum = actual_slice.properties['devices'][wtp]['quantum']
+        if wtp_quantum < self.quantum_max:
+            # incrementar 10% del quantum en este wtp para esta slice
+            updated_slice = {
+                'slice_id': actual_slice.slice_id,
+                'properties': {
+                    'amsdu_aggregation': actual_slice.properties['amsdu_aggregation'],
+                    'quantum': actual_slice.properties['quantum'] + 1,
+                    'sta_scheduler': actual_slice.properties['sta_scheduler']
+                },
+                'devices': actual_slice.devices
+            }
+            addr = EtherAddress(wtp)
+            if addr not in updated_slice['devices']:
+                updated_slice['devices'][addr] = {
+                    'amsdu_aggregation': actual_slice.properties['amsdu_aggregation'],
+                    'quantum': actual_slice.properties['quantum'] + actual_slice.properties['quantum']*self.quantum_increase,
+                    'sta_scheduler': actual_slice.properties['sta_scheduler']
+                }
+            else:
+                updated_slice['devices'][addr]['quantum'] = updated_slice['devices'][addr]['quantum'] + updated_slice['devices'][addr]['quantum']*self.quantum_increase
+            # Decrementar los quantum para las slices que estan pasadas del rate prometido en el WTP
+            updated_slice2 = self.decreaseQuantum(slc, wtp, updated_slice)
+            self.context.upsert_wifi_slice(**updated_slice2)
+            return True
+        else:
+            return False
+
+    def decreaseQuantum(self, slc, wtp, updated_slice):
+        # para todas las slices en el wtp
+        for idx in self.context.wifi_slices:
+            if idx != slc:
+                query = 'select * from wifi_slice_stats where wtp=\'' + wtp + '\' and slc=\'' + idx + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
+                result = self.query(query)
+                slice_stats = list(result.get_points())
+                if len(slice_stats) > 0:
+                    query = 'select * from slices_rates order by time desc limit 1;'
+                    resultRates = self.query(query)
+                    if len(list(resultRates.get_points())):
+                        slices = list(resultRates.get_points())[0]
+                        if idx in slices:
+                            rate = slices[idx]
+                            tx_bytes = 0
+                            for stats in slice_stats:
+                                tx_bytes += stats['tx_bytes']
+                            tx_bps = tx_bytes / (self.every/1000)
+                            # si el rate de la slice en el wtp es menor al rate prometido, es un candidato
+                            if tx_bps > rate:
+                                addr = EtherAddress(wtp)
+                                if addr not in updated_slice['devices']:
+                                    updated_slice['devices'][addr] = {
+                                        'amsdu_aggregation': updated_slice.properties['amsdu_aggregation'],
+                                        'quantum': updated_slice.properties['quantum'] - updated_slice.properties['quantum']*self.quantum_decrease,
+                                        'sta_scheduler': updated_slice.properties['sta_scheduler']
+                                    }
+                                else:
+                                    updated_slice['devices'][addr]['quantum'] = updated_slice['devices'][addr]['quantum'] - updated_slice['devices'][addr]['quantum']*self.quantum_decrease
+
+        return updated_slice
+
+    def changeNetwork2(self, sta, slc, rate):
+        # por ahora muevo al wtp con rssi mas cercano --- despues cambiar esto
+        #print('*************** SELF BLOCKS: ', self.blocks())
+        #lvap = self.context.lvaps[EtherAddress(sta)]
+        #print('*************** BLOCKS ORDENADOS POR RSSI: {}; **** LVAP ADDR ***: {}; **** LVAP ****: {};'.format(self.blocks().sort_by_rssi(lvap.addr), lvap.addr, lvap))
+        #print('*************** BLOQUE DEL LVAP: ', lvap.blocks)
+        #lvap.blocks = self.blocks().sort_by_rssi(lvap.addr).first()
+        #lvap.blocks = self.blocks()[randrange(4)]
+        print('**************** SLICES: ', self.context.wifi_slices)
+        asd = self.context.wifi_slices['0']
+        print('************* SLICE: ', asd)
+        asd2 = {
+            'slice_id': asd.slice_id,
+            'properties': {
+                'amsdu_aggregation': asd.properties['amsdu_aggregation'],
+                'quantum': asd.properties['quantum'] + 1,
+                'sta_scheduler': asd.properties['sta_scheduler']
+            },
+            'devices': asd.devices
+        }
+        addr = EtherAddress('64:66:B3:8A:52:62')
+        if addr not in asd2['devices']:
+            asd2['devices'][addr] = {
+                'amsdu_aggregation': asd.properties['amsdu_aggregation'],
+                'quantum': asd.properties['quantum'] + 1000,
+                'sta_scheduler': asd.properties['sta_scheduler']
+            }
+        else:
+            asd2['devices'][addr]['quantum'] = asd2['devices'][addr]['quantum'] + 1000
+        print('************ ASD2: ', asd2)
+        self.context.upsert_wifi_slice(**asd2)
+
 
     # iperf usa Mbits para medir el rate
     def to_Mbits(self, byte):

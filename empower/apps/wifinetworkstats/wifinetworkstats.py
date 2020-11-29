@@ -428,6 +428,7 @@ class NetworkStats(EWiFiApp):
             }
 
             tags = dict(self.params)
+            tags["slc"] = slc
             tags["wtp"] = wtp
             tags["iface_id"] = entry.iface_id
 
