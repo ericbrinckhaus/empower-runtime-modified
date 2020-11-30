@@ -43,6 +43,7 @@ class NetworkManager(EWiFiApp):
         self.threshold = 0.75
         self.RSSI_min = -50 # TODO ver valores de RSSI razonables
         self.quantum_max = 15000
+        self.quantum_min = 10000
         self.quantum_increase = 0.1
         self.quantum_decrease = 0.1
         self.changes = {}
@@ -170,7 +171,8 @@ class NetworkManager(EWiFiApp):
         wtp = lvap.wtp.addr
         actual_slice = self.context.wifi_slices[str(slc)]
         wtp_quantum = actual_slice.properties['quantum']
-        if EtherAddress(wtp) not in actual_slice.properties['devices']:
+        print('********** CHANGE QUANTUM ----- ACTUAL SLICE PROPERTIES:' , actual_slice.properties)
+        if 'devices' in actual_slice.properties and EtherAddress(wtp) in actual_slice.properties['devices']:
             wtp_quantum = actual_slice.properties['devices'][wtp]['quantum']
         if wtp_quantum < self.quantum_max:
             # incrementar 10% del quantum en este wtp para esta slice
@@ -178,7 +180,7 @@ class NetworkManager(EWiFiApp):
                 'slice_id': actual_slice.slice_id,
                 'properties': {
                     'amsdu_aggregation': actual_slice.properties['amsdu_aggregation'],
-                    'quantum': actual_slice.properties['quantum'] + 1,
+                    'quantum': actual_slice.properties['quantum'],
                     'sta_scheduler': actual_slice.properties['sta_scheduler']
                 },
                 'devices': actual_slice.devices
@@ -217,17 +219,22 @@ class NetworkManager(EWiFiApp):
                             for stats in slice_stats:
                                 tx_bytes += stats['tx_bytes']
                             tx_bps = tx_bytes / (self.every/1000)
-                            # si el rate de la slice en el wtp es menor al rate prometido, es un candidato
+                            # si el rate actual es mayor al prometido y el quantum de esa slice en el wtp es mayor al minimo, le saco recursos
                             if tx_bps > rate:
-                                addr = EtherAddress(wtp)
-                                if addr not in updated_slice['devices']:
-                                    updated_slice['devices'][addr] = {
-                                        'amsdu_aggregation': updated_slice.properties['amsdu_aggregation'],
-                                        'quantum': updated_slice.properties['quantum'] - updated_slice.properties['quantum']*self.quantum_decrease,
-                                        'sta_scheduler': updated_slice.properties['sta_scheduler']
-                                    }
-                                else:
-                                    updated_slice['devices'][addr]['quantum'] = updated_slice['devices'][addr]['quantum'] - updated_slice['devices'][addr]['quantum']*self.quantum_decrease
+                                actual_slice = self.context.wifi_slices[str(idx)]
+                                wtp_quantum = actual_slice.properties['quantum']
+                                if 'devices' in actual_slice.properties and EtherAddress(wtp) in actual_slice.properties['devices']:
+                                    wtp_quantum = actual_slice.properties['devices'][wtp]['quantum']
+                                if wtp_quantum > self.quantum_min:
+                                    addr = EtherAddress(wtp)
+                                    if addr not in updated_slice['devices']:
+                                        updated_slice['devices'][addr] = {
+                                            'amsdu_aggregation': updated_slice.properties['amsdu_aggregation'],
+                                            'quantum': updated_slice.properties['quantum'] - updated_slice.properties['quantum']*self.quantum_decrease,
+                                            'sta_scheduler': updated_slice.properties['sta_scheduler']
+                                        }
+                                    else:
+                                        updated_slice['devices'][addr]['quantum'] = updated_slice['devices'][addr]['quantum'] - updated_slice['devices'][addr]['quantum']*self.quantum_decrease
 
         return updated_slice
 
