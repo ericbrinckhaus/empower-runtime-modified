@@ -106,12 +106,12 @@ class NetworkManager(EWiFiApp):
         if total_last_attempts > 0:
             success_rate = total_last_successes / total_last_attempts
             if success_rate < self.threshold:
-                query = 'select * from lvap_counters_stats where sta=\'' + lvap + '\' order by time desc limit 3;'
+                query = 'select * from lvap_counters_stats where sta=\'' + lvap + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
                 result = self.query(query)
                 counters = list(result.get_points())
                 tx_bps = 0
                 for counter in counters:
-                    tx_bps += counter.tx_bps
+                    tx_bps += counter["tx_bps"]
                 tx_bps = tx_bps / len(counters)
                 # Si esta por debajo del rate prometido entonces tengo que hacer algo
                 if (tx_bps < rate):

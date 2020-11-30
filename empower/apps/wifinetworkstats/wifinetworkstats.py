@@ -330,11 +330,11 @@ class NetworkStats(EWiFiApp):
         tx_samples = response.stats[0:response.nb_tx]
         rx_samples = response.stats[response.nb_tx:-1]
 
-        old_tx_bytes = self.lvap_counters[sta]["tx_bytes"]
-        old_rx_bytes = self.lvap_counters[sta]["rx_bytes"]
+        old_tx_bytes = self.lvap_counters[sta]["tx_bytes"] if sta in self.lvap_counters else 0.0
+        old_rx_bytes = self.lvap_counters[sta]["rx_bytes"] if sta in self.lvap_counters else 0.0
 
-        old_tx_packets = self.lvap_counters[sta]["tx_packets"]
-        old_rx_packets = self.lvap_counters[sta]["rx_packets"]
+        old_tx_packets = self.lvap_counters[sta]["tx_packets"] if sta in self.lvap_counters else 0.0
+        old_rx_packets = self.lvap_counters[sta]["rx_packets"] if sta in self.lvap_counters else 0.0
 
         self.lvap_counters[sta]["tx_bytes"] = self.fill_bytes_samples(tx_samples)
         self.lvap_counters[sta]["rx_bytes"] = self.fill_bytes_samples(rx_samples)

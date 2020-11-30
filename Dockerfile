@@ -44,7 +44,7 @@ RUN mkdir -p /var/www/
 RUN ln -s /empower-runtime-modified-main/webui/ /var/www/empower
 
 # Create start up script entrypoint
-RUN echo "cd empower-runtime-modified-main\nsystemctl enable mongod.service\nsystemctl start mongod.service\nservice influxdb start\npython3 empower-runtime.py" > entry.sh
+RUN echo "cd empower-runtime-modified-main\nsystemctl enable mongod.service\nsystemctl start mongod.service\nservice influxdb start\npython3 script_db.py\npython3 empower-runtime.py" > entry.sh
 
 # Run the controller
 #ENTRYPOINT ["/bin/sh", "entry.sh"]
