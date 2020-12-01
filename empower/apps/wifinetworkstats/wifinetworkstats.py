@@ -130,6 +130,46 @@ WIFI_RC_STATS_RESPONSE = Struct(
 )
 WIFI_RC_STATS_RESPONSE.name = "wifi_rc_stats_response"
 
+PT_UCQM_REQUEST = 0x40
+PT_UCQM_RESPONSE = 0x41
+
+PT_NCQM_REQUEST = 0x42
+PT_NCQM_RESPONSE = 0x43
+
+CQM_REQUEST = Struct(
+    "version" / Int8ub,
+    "type" / Int8ub,
+    "length" / Int32ub,
+    "seq" / Int32ub,
+    "xid" / Int32ub,
+    "device" / Bytes(6),
+    "iface_id" / Int32ub,
+)
+CQM_REQUEST.name = "cqm_request"
+
+CQM_ENTRY = Struct(
+    "addr" / Bytes(6),
+    "last_rssi_std" / Int8ub,
+    "last_rssi_avg" / Int8ub,
+    "last_packets" / Int32ub,
+    "hist_packets" / Int32ub,
+    "mov_rssi" / Int8ub
+)
+CQM_ENTRY.name = "ucqm_entry"
+
+CQM_RESPONSE = Struct(
+    "version" / Int8ub,
+    "type" / Int8ub,
+    "length" / Int32ub,
+    "seq" / Int32ub,
+    "xid" / Int32ub,
+    "device" / Bytes(6),
+    "iface_id" / Int32ub,
+    "nb_entries" / Int16ub,
+    "entries" / Array(lambda ctx: ctx.nb_entries, CQM_ENTRY)
+)
+CQM_RESPONSE.name = "cqm_response"
+
 class NetworkStats(EWiFiApp):
     """WiFi Netork Statistics Primitive.
 
@@ -161,6 +201,10 @@ class NetworkStats(EWiFiApp):
         lvapp.register_message(PT_BIN_COUNTERS_RESPONSE, BIN_COUNTERS_RESPONSE)
         lvapp.register_message(PT_WIFI_RC_STATS_REQUEST, WIFI_RC_STATS_REQUEST)
         lvapp.register_message(PT_WIFI_RC_STATS_RESPONSE, WIFI_RC_STATS_RESPONSE)
+        lvapp.register_message(PT_UCQM_REQUEST, CQM_REQUEST)
+        lvapp.register_message(PT_UCQM_RESPONSE, CQM_RESPONSE)
+        lvapp.register_message(PT_NCQM_REQUEST, CQM_REQUEST)
+        lvapp.register_message(PT_NCQM_RESPONSE, CQM_RESPONSE)
 
         # Data structures
         self.stats = {}
@@ -186,6 +230,9 @@ class NetworkStats(EWiFiApp):
         self.slice_stats = {}
         for slc in self.context.wifi_slices:
             self.slice_stats[slc] = self.stats.copy()
+
+        self.ucqm = {}
+        self.ncqm = {}
 
         # Last seen time
         self.last = None
@@ -217,9 +264,10 @@ class NetworkStats(EWiFiApp):
 
         out = super().to_dict()
         out['stats'] = self.slice_stats
-        #out['sta'] = self.sta
         out['counters'] = self.lvap_counters
         out['rates'] = self.lvap_rates
+        out['ucqm'] = self.ucqm
+        out['ncqm'] = self.ncqm
 
         return out
 
@@ -263,6 +311,18 @@ class NetworkStats(EWiFiApp):
                 wtp.connection.send_message(PT_WIFI_SLICE_STATS_REQUEST,
                                             msg,
                                             self.handle_slice_stats_response)
+                for block in wtp.blocks.values():
+
+                    msg = Container(length=CQM_REQUEST.sizeof(),
+                                    iface_id=block.block_id)
+
+                    wtp.connection.send_message(PT_UCQM_REQUEST,
+                                                msg,
+                                                self.handle_ucqm_response)
+
+                    wtp.connection.send_message(PT_NCQM_REQUEST,
+                                                msg,
+                                                self.handle_ncqm_response)
 
 
     def fill_bytes_samples(self, data):
@@ -539,6 +599,71 @@ class NetworkStats(EWiFiApp):
 
         # save to db
         self.write_points(points)
+
+    def handle_ucqm_response(self, response, wtp, _):
+        """Handle UCQM_RESPONSE message."""
+
+        block = wtp.blocks[response.iface_id]
+        block.ucqm = {}
+
+        # generate data points
+        points = []
+        timestamp = datetime.utcnow()
+
+        for entry in response.entries:
+            addr = EtherAddress(entry['addr'])
+            block.ucqm[addr] = {
+                'addr': addr,
+                'last_rssi_std': entry['last_rssi_std'],
+                'last_rssi_avg': entry['last_rssi_avg'],
+                'last_packets': entry['last_packets'],
+                'hist_packets': entry['hist_packets'],
+                'mov_rssi': entry['mov_rssi']
+            }
+
+            tags = dict(self.params)
+            tags["wtp"] = wtp.addr
+            tags["block_id"] = response.iface_id
+            tags["addr"] = addr
+
+            sample = {
+                "measurement": self.name,
+                "tags": tags,
+                "time": timestamp,
+                "fields": block.ucqm[addr]
+            }
+
+            points.append(sample)
+
+        # save to db
+        self.write_points(points)
+
+        self.ucqm[block.block_id] = block.ucqm
+
+        # handle callbacks
+        self.handle_callbacks()
+
+    def handle_ncqm_response(self, response, wtp, _):
+        """Handle NCQM_RESPONSE message."""
+
+        block = wtp.blocks[response.iface_id]
+        block.ncqm = {}
+
+        for entry in response.entries:
+            addr = EtherAddress(entry['addr'])
+            block.ncqm[addr] = {
+                'addr': addr,
+                'last_rssi_std': entry['last_rssi_std'],
+                'last_rssi_avg': entry['last_rssi_avg'],
+                'last_packets': entry['last_packets'],
+                'hist_packets': entry['hist_packets'],
+                'mov_rssi': entry['mov_rssi']
+            }
+
+        self.ncqm = block.ncqm
+
+        # handle callbacks
+        self.handle_callbacks()
 
 def launch(context, service_id, every=EVERY):
     """ Initialize the module. """
