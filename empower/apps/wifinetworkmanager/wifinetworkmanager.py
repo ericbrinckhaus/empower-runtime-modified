@@ -41,7 +41,7 @@ class NetworkManager(EWiFiApp):
 
         # Data structures
         self.threshold = 0.75
-        self.RSSI_min = 150 # TODO ver valores de RSSI razonables
+        self.RSSI_min = 170 # TODO ver valores de RSSI razonables
         self.quantum_max = 15000
         self.quantum_min = 10000
         self.quantum_increase = 0.1
@@ -142,12 +142,12 @@ class NetworkManager(EWiFiApp):
             else:
                 return False
         # Filtramos los wtp que tengan malo RSSI
-        filtered_blocks = filter(filterBlocks, blocks)
+        filtered_blocks = list(filter(filterBlocks, blocks))
         for block in filtered_blocks:
-            query = 'select * from wifi_slice_stats where wtp=\'' + block.hwaddr() + '\' and slc=\'' + slc + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
+            query = 'select * from wifi_slice_stats where wtp=\'' + block.hwaddr.to_str() + '\' and slc=\'' + slc + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
             result = self.query(query)
             slice_stats = list(result.get_points())
-            print("************* WIFI SLICE STATS SLC--> {} ; WTP-->: {}:::: {}".format(slc, block.hwaddr(), slice_stats))
+            print("************* WIFI SLICE STATS SLC--> {} ; WTP-->: {}:::: {}".format(slc, block.hwaddr.to_str(), slice_stats))
             tx_bytes = 0
             for stats in slice_stats:
                 tx_bytes += stats['tx_bytes']
@@ -156,10 +156,8 @@ class NetworkManager(EWiFiApp):
             if tx_bps < rate:
                 posibles_handovers.append({'block':block, 'rate':tx_bps})
         if len(posibles_handovers) > 0:
-            def get_rate(blck):
-                return blck['rate']
             # Ordeno los bloques por rate asi me quedo con el que tenga menos
-            posibles_handovers.sort(get_rate)
+            posibles_handovers.sort(key=lambda x: x['rate'])
             # Do Handover
             lvap.blocks = posibles_handovers[0]['block']
             return True
@@ -171,9 +169,8 @@ class NetworkManager(EWiFiApp):
         wtp = lvap.wtp.addr
         actual_slice = self.context.wifi_slices[str(slc)]
         wtp_quantum = actual_slice.properties['quantum']
-        print('********** CHANGE QUANTUM ----- ACTUAL SLICE PROPERTIES:' , actual_slice.properties)
-        if 'devices' in actual_slice.properties and EtherAddress(wtp) in actual_slice.properties['devices']:
-            wtp_quantum = actual_slice.properties['devices'][wtp]['quantum']
+        if EtherAddress(wtp) in actual_slice.devices:
+            wtp_quantum = actual_slice.devices[wtp]['quantum']
         if wtp_quantum < self.quantum_max:
             # incrementar 10% del quantum en este wtp para esta slice
             updated_slice = {
@@ -223,8 +220,8 @@ class NetworkManager(EWiFiApp):
                             if tx_bps > rate:
                                 actual_slice = self.context.wifi_slices[str(idx)]
                                 wtp_quantum = actual_slice.properties['quantum']
-                                if 'devices' in actual_slice.properties and EtherAddress(wtp) in actual_slice.properties['devices']:
-                                    wtp_quantum = actual_slice.properties['devices'][wtp]['quantum']
+                                if EtherAddress(wtp) in actual_slice.devices:
+                                    wtp_quantum = actual_slice.devices[wtp]['quantum']
                                 if wtp_quantum > self.quantum_min:
                                     addr = EtherAddress(wtp)
                                     if addr not in updated_slice['devices']:
