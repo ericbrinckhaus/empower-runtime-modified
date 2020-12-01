@@ -311,18 +311,24 @@ class NetworkStats(EWiFiApp):
                 wtp.connection.send_message(PT_WIFI_SLICE_STATS_REQUEST,
                                             msg,
                                             self.handle_slice_stats_response)
-                for block in wtp.blocks.values():
 
-                    msg = Container(length=CQM_REQUEST.sizeof(),
-                                    iface_id=block.block_id)
+        for wtp in self.context.wtps.values():
 
-                    wtp.connection.send_message(PT_UCQM_REQUEST,
-                                                msg,
-                                                self.handle_ucqm_response)
+            if not wtp.connection:
+                continue
 
-                    wtp.connection.send_message(PT_NCQM_REQUEST,
-                                                msg,
-                                                self.handle_ncqm_response)
+            for block in wtp.blocks.values():
+
+                msg = Container(length=CQM_REQUEST.sizeof(),
+                                iface_id=block.block_id)
+
+                wtp.connection.send_message(PT_UCQM_REQUEST,
+                                            msg,
+                                            self.handle_ucqm_response)
+
+                wtp.connection.send_message(PT_NCQM_REQUEST,
+                                            msg,
+                                            self.handle_ncqm_response)
 
 
     def fill_bytes_samples(self, data):
@@ -627,7 +633,7 @@ class NetworkStats(EWiFiApp):
             tags["addr"] = addr
 
             sample = {
-                "measurement": self.name,
+                "measurement": 'ucqm_rssi',
                 "tags": tags,
                 "time": timestamp,
                 "fields": block.ucqm[addr]
@@ -638,7 +644,10 @@ class NetworkStats(EWiFiApp):
         # save to db
         self.write_points(points)
 
-        self.ucqm[block.block_id] = block.ucqm
+        if wtp.addr not in self.ucqm:
+            self.ucqm[wtp.addr] = {}
+        self.ucqm[wtp.addr][block.block_id] = block.ucqm
+        self.ucqm[wtp.addr][block.block_id]['timestamp'] = timestamp
 
         # handle callbacks
         self.handle_callbacks()
@@ -660,7 +669,10 @@ class NetworkStats(EWiFiApp):
                 'mov_rssi': entry['mov_rssi']
             }
 
-        self.ncqm = block.ncqm
+        if wtp.addr not in self.ncqm:
+            self.ncqm[wtp.addr] = {}
+        self.ncqm[wtp.addr][block.block_id] = block.ncqm
+        self.ucqm[wtp.addr][block.block_id]['timestamp'] = datetime.utcnow()
 
         # handle callbacks
         self.handle_callbacks()

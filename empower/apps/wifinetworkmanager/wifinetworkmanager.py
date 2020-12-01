@@ -41,7 +41,7 @@ class NetworkManager(EWiFiApp):
 
         # Data structures
         self.threshold = 0.75
-        self.RSSI_min = -50 # TODO ver valores de RSSI razonables
+        self.RSSI_min = 150 # TODO ver valores de RSSI razonables
         self.quantum_max = 15000
         self.quantum_min = 10000
         self.quantum_increase = 0.1
