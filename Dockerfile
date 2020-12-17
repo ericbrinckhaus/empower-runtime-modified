@@ -4,7 +4,7 @@
 ## after run : /bin/sh entry.sh 
 
 FROM ubuntu:20.04
-MAINTAINER El Eric y El Eche  <ebrinckhaus@blueboot.com agustin.echeverria@basf.com>
+MAINTAINER Eric Brinckhaus y Agustin Echeverria  <eric.brinckhaus@fing.edu.uy agustin.echeverria@fing.edu.uy>
 
 # Installing python dependencies
 RUN apt update

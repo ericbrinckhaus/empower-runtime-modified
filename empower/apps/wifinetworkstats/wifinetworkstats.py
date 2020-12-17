@@ -4,8 +4,11 @@ import time
 import math
 
 from datetime import datetime
+from datetime import timedelta
 
-from construct import Struct, Int8ub, Int16ub, Int32ub, Bytes, Array
+from itertools import groupby
+
+from construct import Struct, Int8ub, Int16ub, Int32ub, Int64ub, Bytes, Array
 from construct import Container
 
 import empower.managers.ranmanager.lvapp as lvapp
@@ -170,6 +173,40 @@ CQM_RESPONSE = Struct(
 )
 CQM_RESPONSE.name = "cqm_response"
 
+PT_WCS_REQUEST = 0x4A
+PT_WCS_RESPONSE = 0x4B
+
+WCS_REQUEST = Struct(
+    "version" / Int8ub,
+    "type" / Int8ub,
+    "length" / Int32ub,
+    "seq" / Int32ub,
+    "xid" / Int32ub,
+    "device" / Bytes(6),
+    "iface_id" / Int32ub,
+)
+WCS_REQUEST.name = "wcs_request"
+
+WCS_ENTRY = Struct(
+    "type" / Int8ub,
+    "timestamp" / Int64ub,
+    "sample" / Int32ub,
+)
+WCS_ENTRY.name = "wcs_entry"
+
+WCS_RESPONSE = Struct(
+    "version" / Int8ub,
+    "type" / Int8ub,
+    "length" / Int32ub,
+    "seq" / Int32ub,
+    "xid" / Int32ub,
+    "device" / Bytes(6),
+    "iface_id" / Int32ub,
+    "nb_entries" / Int16ub,
+    "entries" / Array(lambda ctx: ctx.nb_entries, WCS_ENTRY)
+)
+WCS_RESPONSE.name = "wcs_response"
+
 class NetworkStats(EWiFiApp):
     """WiFi Netork Statistics Primitive.
 
@@ -205,6 +242,8 @@ class NetworkStats(EWiFiApp):
         lvapp.register_message(PT_UCQM_RESPONSE, CQM_RESPONSE)
         lvapp.register_message(PT_NCQM_REQUEST, CQM_REQUEST)
         lvapp.register_message(PT_NCQM_RESPONSE, CQM_RESPONSE)
+        lvapp.register_message(PT_WCS_REQUEST, WCS_REQUEST)
+        lvapp.register_message(PT_WCS_RESPONSE, WCS_RESPONSE)
 
         # Data structures
         self.stats = {}
@@ -254,6 +293,10 @@ class NetworkStats(EWiFiApp):
         # Lvap RC Stats classes
         self.rc_stats_classes = {}
 
+        self.channel_stats = {}
+        self.agent_ts_ref = {}
+        self.runtime_ts_ref = {}
+
     def __eq__(self, other):
         if isinstance(other, NetworkStats):
             return self.every == other.every
@@ -268,6 +311,7 @@ class NetworkStats(EWiFiApp):
         out['rates'] = self.lvap_rates
         out['ucqm'] = self.ucqm
         out['ncqm'] = self.ncqm
+        out['channel_stats'] = self.channel_stats
 
         return out
 
@@ -329,6 +373,13 @@ class NetworkStats(EWiFiApp):
                 wtp.connection.send_message(PT_NCQM_REQUEST,
                                             msg,
                                             self.handle_ncqm_response)
+
+                msg = Container(length=WCS_REQUEST.sizeof(),
+                                iface_id=block.block_id)
+
+                wtp.connection.send_message(PT_WCS_REQUEST,
+                                            msg,
+                                            self.handle_wcs_response)
 
 
     def fill_bytes_samples(self, data):
@@ -673,6 +724,89 @@ class NetworkStats(EWiFiApp):
             self.ncqm[wtp.addr] = {}
         self.ncqm[wtp.addr][block.block_id] = block.ncqm
         self.ucqm[wtp.addr][block.block_id]['timestamp'] = datetime.utcnow()
+
+        # handle callbacks
+        self.handle_callbacks()
+
+    def handle_wcs_response(self, response, wtp, _):
+        """Handle WCS_RESPONSE message."""
+
+        block_id = response.iface_id
+
+        # init data structures for the incoming block
+        if block_id not in self.channel_stats:
+            self.channel_stats[block_id] = {}
+            self.agent_ts_ref[block_id] = 0
+            self.runtime_ts_ref[block_id] = None
+
+        # pre-processing: ed = ed - (rx + tx)
+        # tx: 0:100, rx: 100:200, ed: 200:300
+        for index in range(200, 300):
+            response.entries[index].sample -= \
+                response.entries[index - 100].sample + \
+                response.entries[index - 200].sample
+
+        # at the beginning, create the map between runtime and agent timestamps
+        # entry[0] = stat type [0, 1, 2] -> [tx, rx, ed]
+        # entry[1] = agent timestamp
+        # entry[2] = stat value
+        if self.agent_ts_ref[block_id] == 0:
+            for entry in response.entries:
+                if entry.timestamp > self.agent_ts_ref[block_id]:
+                    self.agent_ts_ref[block_id] = entry.timestamp
+            self.runtime_ts_ref[block_id] = datetime.utcnow()
+
+        self.channel_stats[block_id] = []
+
+        for entry in response.entries:
+
+            stat_type = ["tx", "rx", "ed"][entry.type]
+            ts_delta = timedelta(microseconds=(entry.timestamp -
+                                               self.agent_ts_ref[block_id]))
+            value = entry.sample / 180.0
+
+            # skip invalid samples
+            if abs(value) == 200:  # tx, rx: 200; ed: 200 - (200 + 200)
+                continue
+
+            sample = {
+                "type": stat_type,
+                "time": self.runtime_ts_ref[block_id] + ts_delta,
+                "value": value
+            }
+
+            self.channel_stats[block_id].append(sample)
+
+        # update wifi_stats module
+        block = wtp.blocks[block_id]
+        block.channel_stats = self.channel_stats[block_id]
+
+        # save samples
+        sorted_samples = sorted(block.channel_stats,
+                                key=lambda x: x["time"].timestamp())
+        samples = []
+
+        for tstamp, sample_fields in groupby(sorted_samples,
+                                             lambda x: x["time"].timestamp()):
+
+            fields = {}
+
+            for item in sample_fields:
+                fields[item["type"]] = item["value"]
+
+            tags = dict(self.params)
+            tags["wtp"] = wtp.addr
+            tags["block_id"] = block_id
+
+            sample = {
+                "measurement": "wifi_channel_stats",
+                "tags": tags,
+                "time": datetime.fromtimestamp(tstamp),
+                "fields": fields
+            }
+            samples.append(sample)
+
+        self.write_points(samples)
 
         # handle callbacks
         self.handle_callbacks()
