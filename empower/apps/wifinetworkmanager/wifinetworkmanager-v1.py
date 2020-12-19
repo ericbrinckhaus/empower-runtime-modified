@@ -150,29 +150,21 @@ class NetworkManager(EWiFiApp):
                 return False
         # Filtramos los wtp que tengan malo RSSI
         filtered_blocks = list(filter(filterBlocks, blocks))
-        # obtengo el uso del wtp actual
-        print('******* CURRENT BLOCK: {} ID: {} '.format(lvap.blocks.hwaddr.to_str(),lvap.blocks.block_id()))
-        query = 'select * from wifi_channel_stats where wtp=\'' + lvap.blocks.hwaddr.to_str() + '\' and block_id=\'' + lvap.blocks.block_id() + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
-        result = self.query(query)
-        current_channel_stats = list(result.get_points())
-        print("************* CURRENT CHANNEL STATS --> {} ; WTP-->: {}:::: {}".format(lvap.blocks.block_id(), lvap.blocks.hwaddr.to_str(), current_channel_stats))
-        current_usage = 0
-        for current_stats in current_channel_stats:
-            current_usage += current_stats['tx'] + current_stats['rx'] + current_stats['ed']
         for block in filtered_blocks:
-            query = 'select * from wifi_channel_stats where wtp=\'' + block.hwaddr.to_str() + '\' and block_id=\'' + block.block_id() + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
+            query = 'select * from wifi_slice_stats where wtp=\'' + block.hwaddr.to_str() + '\' and slc=\'' + slc + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
             result = self.query(query)
-            channel_stats = list(result.get_points())
-            print("************* CHANNEL STATS SLC--> {} ; WTP-->: {}:::: {}".format(block.block_id(), block.hwaddr.to_str(), channel_stats))
-            usage = 0
-            for stats in channel_stats:
-                usage += stats['tx'] + stats['rx'] + stats['ed']
-            # si el uso del wtp es menor al actual, lo agrego como posible handover
-            if usage < current_usage:
-                posibles_handovers.append({'block':block, 'usage':usage})
+            slice_stats = list(result.get_points())
+            print("************* WIFI SLICE STATS SLC--> {} ; WTP-->: {}:::: {}".format(slc, block.hwaddr.to_str(), slice_stats))
+            tx_bytes = 0
+            for stats in slice_stats:
+                tx_bytes += stats['tx_bytes']
+            tx_bps = tx_bytes / (self.every/1000)
+            # si el rate de la slice en el wtp es menor al rate prometido, es un candidato
+            if tx_bps < rate:
+                posibles_handovers.append({'block':block, 'rate':tx_bps})
         if len(posibles_handovers) > 0:
-            # Ordeno los bloques por usage asi me quedo con el que tenga menos
-            posibles_handovers.sort(key=lambda x: x['usage'])
+            # Ordeno los bloques por rate asi me quedo con el que tenga menos
+            posibles_handovers.sort(key=lambda x: x['rate'])
             # Do Handover
             lvap.blocks = posibles_handovers[0]['block']
             return True
@@ -251,6 +243,39 @@ class NetworkManager(EWiFiApp):
                                         updated_slice['devices'][addr]['quantum'] = updated_slice['devices'][addr]['quantum'] - updated_slice['devices'][addr]['quantum']*self.quantum_decrease
 
         return updated_slice
+
+    def changeNetwork2(self, sta, slc, rate):
+        # por ahora muevo al wtp con rssi mas cercano --- despues cambiar esto
+        #print('*************** SELF BLOCKS: ', self.blocks())
+        #lvap = self.context.lvaps[EtherAddress(sta)]
+        #print('*************** BLOCKS ORDENADOS POR RSSI: {}; **** LVAP ADDR ***: {}; **** LVAP ****: {};'.format(self.blocks().sort_by_rssi(lvap.addr), lvap.addr, lvap))
+        #print('*************** BLOQUE DEL LVAP: ', lvap.blocks)
+        #lvap.blocks = self.blocks().sort_by_rssi(lvap.addr).first()
+        #lvap.blocks = self.blocks()[randrange(4)]
+        print('**************** SLICES: ', self.context.wifi_slices)
+        asd = self.context.wifi_slices['0']
+        print('************* SLICE: ', asd)
+        asd2 = {
+            'slice_id': asd.slice_id,
+            'properties': {
+                'amsdu_aggregation': asd.properties['amsdu_aggregation'],
+                'quantum': asd.properties['quantum'] + 1,
+                'sta_scheduler': asd.properties['sta_scheduler']
+            },
+            'devices': asd.devices
+        }
+        addr = EtherAddress('64:66:B3:8A:52:62')
+        if addr not in asd2['devices']:
+            asd2['devices'][addr] = {
+                'amsdu_aggregation': asd.properties['amsdu_aggregation'],
+                'quantum': asd.properties['quantum'] + 1000,
+                'sta_scheduler': asd.properties['sta_scheduler']
+            }
+        else:
+            asd2['devices'][addr]['quantum'] = asd2['devices'][addr]['quantum'] + 1000
+        print('************ ASD2: ', asd2)
+        self.context.upsert_wifi_slice(**asd2)
+
 
     # iperf usa Mbits para medir el rate
     def to_Mbits(self, byte):
