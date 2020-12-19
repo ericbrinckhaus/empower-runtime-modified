@@ -28,19 +28,19 @@ class NetworkManager(EWiFiApp):
         {
             "name": "empower.apps.wifinetworkmanager.wifinetworkmanager",
             "params": {
-                "every": 2000
+                "every": 6000
             }
         }
     """
 
-    def __init__(self, context, service_id, every=EVERY):
+    def __init__(self, context, service_id, every=EVERY*3):
 
         super().__init__(context=context,
                          service_id=service_id,
                          every=every)
 
         # Data structures
-        self.threshold = 0.75
+        self.threshold = 0.95 #TODO 0.75
         self.RSSI_min = 170 # TODO ver valores de RSSI razonables
         self.quantum_max = 15000
         self.quantum_min = 10000
@@ -151,19 +151,19 @@ class NetworkManager(EWiFiApp):
         # Filtramos los wtp que tengan malo RSSI
         filtered_blocks = list(filter(filterBlocks, blocks))
         # obtengo el uso del wtp actual
-        print('******* CURRENT BLOCK: {} ID: {} '.format(lvap.blocks.hwaddr.to_str(),lvap.blocks.block_id()))
-        query = 'select * from wifi_channel_stats where wtp=\'' + lvap.blocks.hwaddr.to_str() + '\' and block_id=\'' + lvap.blocks.block_id() + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
+        print('******* CURRENT BLOCK: {} ID: {} '.format(lvap.blocks[0].hwaddr.to_str(),str(lvap.blocks[0].block_id)))
+        query = 'select * from wifi_channel_stats where wtp=\'' + lvap.blocks[0].hwaddr.to_str() + '\' and block_id=\'' + str(lvap.blocks[0].block_id) + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
         result = self.query(query)
         current_channel_stats = list(result.get_points())
-        print("************* CURRENT CHANNEL STATS --> {} ; WTP-->: {}:::: {}".format(lvap.blocks.block_id(), lvap.blocks.hwaddr.to_str(), current_channel_stats))
+        print("************* CURRENT CHANNEL STATS --> {} ; WTP-->: {}:::: {}".format(str(lvap.blocks[0].block_id), lvap.blocks[0].hwaddr.to_str(), current_channel_stats))
         current_usage = 0
         for current_stats in current_channel_stats:
             current_usage += current_stats['tx'] + current_stats['rx'] + current_stats['ed']
         for block in filtered_blocks:
-            query = 'select * from wifi_channel_stats where wtp=\'' + block.hwaddr.to_str() + '\' and block_id=\'' + block.block_id() + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
+            query = 'select * from wifi_channel_stats where wtp=\'' + block.hwaddr.to_str() + '\' and block_id=\'' + str(block.block_id) + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
             result = self.query(query)
             channel_stats = list(result.get_points())
-            print("************* CHANNEL STATS SLC--> {} ; WTP-->: {}:::: {}".format(block.block_id(), block.hwaddr.to_str(), channel_stats))
+            print("************* CHANNEL STATS SLC--> {} ; WTP-->: {}:::: {}".format(str(block.block_id), block.hwaddr.to_str(), channel_stats))
             usage = 0
             for stats in channel_stats:
                 usage += stats['tx'] + stats['rx'] + stats['ed']

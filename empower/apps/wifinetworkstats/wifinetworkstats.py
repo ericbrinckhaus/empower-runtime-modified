@@ -728,7 +728,7 @@ class NetworkStats(EWiFiApp):
         # handle callbacks
         self.handle_callbacks()
 
-    def handle_wcs_response(self, response, wtp, _):
+    def handle_wcs_response(self, response, wtp, *_):
         """Handle WCS_RESPONSE message."""
 
         block_id = response.iface_id
@@ -741,6 +741,7 @@ class NetworkStats(EWiFiApp):
 
         # pre-processing: ed = ed - (rx + tx)
         # tx: 0:100, rx: 100:200, ed: 200:300
+        # TODO ver si hay que usar esto o no
         for index in range(200, 300):
             response.entries[index].sample -= \
                 response.entries[index - 100].sample + \
@@ -766,7 +767,8 @@ class NetworkStats(EWiFiApp):
             value = entry.sample / 180.0
 
             # skip invalid samples
-            if abs(value) == 200:  # tx, rx: 200; ed: 200 - (200 + 200)
+            # TODO ver si esto esta bien
+            if value == None or abs(value) == 200 or abs(value) == 600:  # tx, rx: 200; ed: 200 - (200 + 200)
                 continue
 
             sample = {

@@ -11,7 +11,7 @@ MANIFEST = {
         "every": {
             "desc": "The update loop period (in ms).",
             "mandatory": False,
-            "default": EVERY,
+            "default": EVERY*3,
             "type": "int"
         }
     }

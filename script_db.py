@@ -23,7 +23,7 @@ points = [
         "tags": {},
         "time": timestamp,
         "fields": {
-            "0": 2.0,
+            "0": 200000000.0, # para que siempre de por debajo del prometido
             "1": 1.0
         }
     },
