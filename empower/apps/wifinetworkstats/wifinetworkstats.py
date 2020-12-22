@@ -297,6 +297,9 @@ class NetworkStats(EWiFiApp):
         self.agent_ts_ref = {}
         self.runtime_ts_ref = {}
 
+        # Fix duplicate response bug
+        self.wcs_seqid = 0
+
     def __eq__(self, other):
         if isinstance(other, NetworkStats):
             return self.every == other.every
@@ -730,6 +733,11 @@ class NetworkStats(EWiFiApp):
 
     def handle_wcs_response(self, response, wtp, *_):
         """Handle WCS_RESPONSE message."""
+
+        if response.seq == self.wcs_seqid:
+            return
+        else:
+            self.wcs_seqid = response.seq 
 
         block_id = response.iface_id
 
