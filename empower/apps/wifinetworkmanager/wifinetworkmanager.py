@@ -47,6 +47,7 @@ class NetworkManager(EWiFiApp):
         self.quantum_increase = 0.1
         self.quantum_decrease = 0.1
         self.changes = {}
+        self.change_quantum = {}
 
     def __eq__(self, other):
         if isinstance(other, NetworkManager):
