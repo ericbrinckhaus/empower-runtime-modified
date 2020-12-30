@@ -158,7 +158,7 @@ class NetworkManager(EWiFiApp):
         print("************* CURRENT CHANNEL STATS --> {} ; WTP-->: {}:::: {}".format(str(lvap.blocks[0].block_id), lvap.blocks[0].hwaddr.to_str(), current_channel_stats))
         current_usage = 0
         for current_stats in current_channel_stats:
-            current_usage += current_stats['tx'] + current_stats['rx'] + current_stats['ed']
+            current_usage += current_stats['tx'] # + current_stats['rx'] + current_stats['ed']
         for block in filtered_blocks:
             query = 'select * from wifi_channel_stats where wtp=\'' + block.hwaddr.to_str() + '\' and block_id=\'' + str(block.block_id) + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
             result = self.query(query)
@@ -166,7 +166,7 @@ class NetworkManager(EWiFiApp):
             print("************* CHANNEL STATS SLC--> {} ; WTP-->: {}:::: {}".format(str(block.block_id), block.hwaddr.to_str(), channel_stats))
             usage = 0
             for stats in channel_stats:
-                usage += stats['tx'] + stats['rx'] + stats['ed']
+                usage += stats['tx'] #+ stats['rx'] + stats['ed']
             # si el uso del wtp es menor al actual, lo agrego como posible handover
             if usage < current_usage:
                 posibles_handovers.append({'block':block, 'usage':usage})
