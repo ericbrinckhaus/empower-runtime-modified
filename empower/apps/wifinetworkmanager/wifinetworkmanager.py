@@ -86,7 +86,7 @@ class NetworkManager(EWiFiApp):
                     lvaps = list(resultSlices.get_points())[0]
                     if len(lvaps):
                         for lvap in lvaps.keys():
-                            if lvap == 'time' or lvap == 'slice':
+                            if lvap == 'time' or lvap == 'slice' or lvaps[lvap] == None:
                                 continue
                             # do algorithm
                             self.decide(rate, lvaps[lvap], slc)
@@ -219,7 +219,7 @@ class NetworkManager(EWiFiApp):
         # para todas las slices en el wtp
         for idx in self.context.wifi_slices:
             if idx != slc:
-                query = 'select * from wifi_slice_stats where wtp=\'' + wtp + '\' and slc=\'' + idx + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
+                query = 'select * from wifi_slice_stats where wtp=\'' + wtp.to_str() + '\' and slc=\'' + idx + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
                 result = self.query(query)
                 slice_stats = list(result.get_points())
                 if len(slice_stats) > 0:
