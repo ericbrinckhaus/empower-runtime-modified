@@ -359,7 +359,7 @@ class NetworkStats(EWiFiApp):
                 wtp.connection.send_message(PT_WIFI_SLICE_STATS_REQUEST,
                                             msg,
                                             self.handle_slice_stats_response)
-                self.slc_xid[msg.xid] = int(slc)
+                self.slc_xid[msg.xid] = slc
 
         for wtp in self.context.wtps.values():
 

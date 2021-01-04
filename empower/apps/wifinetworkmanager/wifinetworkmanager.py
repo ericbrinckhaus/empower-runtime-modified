@@ -48,6 +48,7 @@ class NetworkManager(EWiFiApp):
         self.quantum_decrease = 0.1
         self.changes = {}
         self.change_quantum = {}
+        self.max_handovers = 1
 
     def __eq__(self, other):
         if isinstance(other, NetworkManager):
@@ -65,6 +66,10 @@ class NetworkManager(EWiFiApp):
     def loop(self):
         """Check and update network """
         self.checkNetworkSlices()
+        # initialize wtp handover counter
+        self.wtp_handovers = {}
+        for wtp in self.context.wtps.values():
+            self.wtp_handovers[wtp.addr] = 0
 
         # initialize actual quantum changes
         self.change_quantum = {}
@@ -152,30 +157,49 @@ class NetworkManager(EWiFiApp):
         # Filtramos los wtp que tengan malo RSSI
         filtered_blocks = list(filter(filterBlocks, blocks))
         # obtengo el uso del wtp actual
-        print('******* CURRENT BLOCK: {} ID: {} '.format(lvap.blocks[0].hwaddr.to_str(),str(lvap.blocks[0].block_id)))
         query = 'select * from wifi_channel_stats where wtp=\'' + lvap.blocks[0].hwaddr.to_str() + '\' and block_id=\'' + str(lvap.blocks[0].block_id) + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
         result = self.query(query)
         current_channel_stats = list(result.get_points())
-        print("************* CURRENT CHANNEL STATS --> {} ; WTP-->: {}:::: {}".format(str(lvap.blocks[0].block_id), lvap.blocks[0].hwaddr.to_str(), current_channel_stats))
         current_usage = 0
         for current_stats in current_channel_stats:
             current_usage += current_stats['tx'] # + current_stats['rx'] + current_stats['ed']
+        # obtengo historial de handovers para verificar ping pong
+        query = 'select * from lvaps_handover where sta=\'' + sta + '\' and time > now() - ' + str(int(self.every/1000)*10) + 's;'
+        result = self.query(query)
+        handover_list = list(result.get_points())
         for block in filtered_blocks:
             query = 'select * from wifi_channel_stats where wtp=\'' + block.hwaddr.to_str() + '\' and block_id=\'' + str(block.block_id) + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
             result = self.query(query)
             channel_stats = list(result.get_points())
-            print("************* CHANNEL STATS SLC--> {} ; WTP-->: {}:::: {}".format(str(block.block_id), block.hwaddr.to_str(), channel_stats))
             usage = 0
             for stats in channel_stats:
                 usage += stats['tx'] #+ stats['rx'] + stats['ed']
             # si el uso del wtp es menor al actual, lo agrego como posible handover
-            if usage < current_usage:
+            if usage < current_usage and self.wtp_handovers[block.hwaddr.to_str()] < self.max_handovers and not(self.ping_pong(handover_list, block.hwaddr.to_str())):
                 posibles_handovers.append({'block':block, 'usage':usage})
         if len(posibles_handovers) > 0:
             # Ordeno los bloques por usage asi me quedo con el que tenga menos
             posibles_handovers.sort(key=lambda x: x['usage'])
             # Do Handover
             lvap.blocks = posibles_handovers[0]['block']
+            self.wtp_handovers[posibles_handovers[0]['block'].hwaddr.to_str()] += 1
+            # guardar cambios
+            # generate data points
+            points = []
+            timestamp = datetime.utcnow()
+            fields = {
+                "wtp": posibles_handovers[0]['block'].hwaddr.to_str()
+            }
+            tags = {"sta": sta}
+            sample = {
+                "measurement": 'lvaps_handover',
+                "tags": tags,
+                "time": timestamp,
+                "fields": fields
+            }
+            points.append(sample)
+            # save to db
+            self.write_points(points)
             return True
         else:
             return False
@@ -252,6 +276,21 @@ class NetworkManager(EWiFiApp):
                                         updated_slice['devices'][addr]['quantum'] = updated_slice['devices'][addr]['quantum'] - updated_slice['devices'][addr]['quantum']*self.quantum_decrease
 
         return updated_slice
+
+    def ping_pong(self, list_handovers, wtp):
+        handovers = list_handovers.reverse()
+        res = False
+        last_app = next((i for i, item in enumerate(handovers) if item["wtp"] == wtp), None)
+        if (type(last_app) == int):
+            sec_last_app = next((i for i, item in enumerate(handovers[(last_app+1):]) if item["wtp"] == wtp), None)
+            if (type(sec_last_app) == int):
+                def wtp_address(x):
+                    return x['wtp']
+                seq1 = map(wtp_address, handovers[:last_app])
+                seq2 = map(wtp_address, handovers[(last_app+1):sec_last_app])
+                if (seq1 == seq2):
+                    res = True
+        return res
 
     # iperf usa Mbits para medir el rate
     def to_Mbits(self, byte):
