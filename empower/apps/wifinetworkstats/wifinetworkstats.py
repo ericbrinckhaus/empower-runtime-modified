@@ -345,6 +345,7 @@ class NetworkStats(EWiFiApp):
             #                                 msg,
             #                                 self.handle_rc_response)
 
+        self.slc_xid = {}
         for slc in self.context.wifi_slices:
             for wtp in self.wtps.values():
 
@@ -358,6 +359,7 @@ class NetworkStats(EWiFiApp):
                 wtp.connection.send_message(PT_WIFI_SLICE_STATS_REQUEST,
                                             msg,
                                             self.handle_slice_stats_response)
+                self.slc_xid[msg.xid] = int(slc)
 
         for wtp in self.context.wtps.values():
 
@@ -528,7 +530,8 @@ class NetworkStats(EWiFiApp):
 
         wtp = EtherAddress(response.device)
 
-        slc = str(response.slice_id)
+        # slc = str(response.slice_id)
+        slc = self.slc_xid[response.xid]
 
         # update this object
         if wtp not in self.stats:
