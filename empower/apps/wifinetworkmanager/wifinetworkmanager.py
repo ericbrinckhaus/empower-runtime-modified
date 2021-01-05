@@ -69,7 +69,7 @@ class NetworkManager(EWiFiApp):
         # initialize wtp handover counter
         self.wtp_handovers = {}
         for wtp in self.context.wtps.values():
-            self.wtp_handovers[wtp.addr] = 0
+            self.wtp_handovers[wtp.addr.to_str()] = 0
 
         # initialize actual quantum changes
         self.change_quantum = {}
@@ -278,18 +278,20 @@ class NetworkManager(EWiFiApp):
         return updated_slice
 
     def ping_pong(self, list_handovers, wtp):
-        handovers = list_handovers.reverse()
+        handovers = list_handovers.copy()
+        handovers.reverse()
         res = False
-        last_app = next((i for i, item in enumerate(handovers) if item["wtp"] == wtp), None)
-        if (type(last_app) == int):
-            sec_last_app = next((i for i, item in enumerate(handovers[(last_app+1):]) if item["wtp"] == wtp), None)
-            if (type(sec_last_app) == int):
-                def wtp_address(x):
-                    return x['wtp']
-                seq1 = map(wtp_address, handovers[:last_app])
-                seq2 = map(wtp_address, handovers[(last_app+1):sec_last_app])
-                if (seq1 == seq2):
-                    res = True
+        if len(list_handovers) > 3:
+            last_app = next((i for i, item in enumerate(handovers) if item["wtp"] == wtp), None)
+            if (type(last_app) == int):
+                sec_last_app = next((i for i, item in enumerate(handovers[(last_app+1):]) if item["wtp"] == wtp), None)
+                if (type(sec_last_app) == int):
+                    def wtp_address(x):
+                        return x['wtp']
+                    seq1 = map(wtp_address, handovers[:last_app])
+                    seq2 = map(wtp_address, handovers[(last_app+1):sec_last_app])
+                    if (seq1 == seq2):
+                        res = True
         return res
 
     # iperf usa Mbits para medir el rate
