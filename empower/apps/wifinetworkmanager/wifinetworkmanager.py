@@ -94,7 +94,7 @@ class NetworkManager(EWiFiApp):
                             if lvap == 'time' or lvap == 'slice' or lvaps[lvap] == None:
                                 continue
                             # do algorithm
-                            self.decide(rate, lvaps[lvap], slc)
+                            self.decide(rate, lvaps[lvap], slc, slices)
                     else:
                         print("Slice {} doesnt have any lvap".format(slc))
                 else:
@@ -102,7 +102,7 @@ class NetworkManager(EWiFiApp):
         else:
             print("No Slice-Rate data")
 
-    def decide(self, rate, lvap, slc):
+    def decide(self, rate, lvap, slc, ratesProm):
         # obtengo las stats de rate control desde la ultima vez que pregunte
         query = 'select * from lvap_rc_stats where sta=\'' + lvap + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
         result = self.query(query)
@@ -129,7 +129,7 @@ class NetworkManager(EWiFiApp):
                 tx_bps = tx_bps / len(counters)
                 # Si esta por debajo del rate prometido entonces tengo que hacer algo
                 if (tx_bps < rate):
-                    self.changeNetwork(lvap, slc, rate)
+                    self.changeNetwork(lvap, slc, rate, ratesProm)
                 else:
                     print("Lvap {} is trying more bit rate than promised.".format(lvap))
             else:
@@ -137,15 +137,15 @@ class NetworkManager(EWiFiApp):
         else:
             print("Lvap {} is idle.".format(lvap))
 
-    def changeNetwork(self, sta, slc, rate):
-        if (self.try_handover(sta, slc, rate)):
+    def changeNetwork(self, sta, slc, rate, ratesProm):
+        if (self.try_handover(sta, slc, rate, ratesProm)):
             print('Handover')
         elif (self.try_change_quantum(sta, slc, rate)):
             print('Quantum Change')
         else:
             print('No actions taken, network too busy')
     
-    def try_handover(self, sta, slc, rate):
+    def try_handover(self, sta, slc, rate, ratesProm):
         posibles_handovers = []
         lvap = self.context.lvaps[EtherAddress(sta)]
         blocks = self.blocks().sort_by_rssi(lvap.addr)
@@ -202,7 +202,65 @@ class NetworkManager(EWiFiApp):
             self.write_points(points)
             return True
         else:
-            return False
+            # No encontre WTP con uso menor al actual, entonces me fijo si algun wtp tiene lvaps con rate mayor al prometido
+            for block in filtered_blocks:
+                extra_rate = 0
+                for sta2 in self.context.lvaps:
+                    lvap = self.context.lvaps[sta2]
+                    if lvap.wtp.addr.to_str() == block.hwaddr.to_str():
+                        lvap_slice = self.getSliceLvap(sta2)
+                        promised_rate = ratesProm[lvap_slice]
+                        query = 'select * from lvap_counter_stats where sta=\'' + sta2.to_str() + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
+                        result = self.query(query)
+                        lvap_counter_stats = list(result.get_points())
+                        lvap_rate = 0
+                        for lvap_counter in lvap_counter_stats:
+                            lvap_rate += lvap_rate + lvap_counter["tx_bps"]
+                        lvap_rate = lvap_rate / len(lvap_counter_stats)
+                        if (lvap_rate - promised_rate) > 0:
+                            extra_rate += (lvap_rate - promised_rate)
+                if extra_rate > 0 and extra_rate >= rate and self.wtp_handovers[block.hwaddr.to_str()] < self.max_handovers and not(self.ping_pong(handover_list, block.hwaddr.to_str())):
+                    posibles_handovers.append({'block':block, 'extra_rate':extra_rate})
+            if len(posibles_handovers) > 0:
+                # Ordeno los bloques por rate extra asi me quedo con el que tenga mas
+                posibles_handovers.sort(key=lambda x: x['extra_rate'])
+                # Do Handover
+                lvap.blocks = posibles_handovers[-1]['block']
+                self.wtp_handovers[posibles_handovers[-1]['block'].hwaddr.to_str()] += 1
+                # guardar cambios
+                # generate data points
+                points = []
+                timestamp = datetime.utcnow()
+                fields = {
+                    "wtp": posibles_handovers[-1]['block'].hwaddr.to_str()
+                }
+                tags = {"sta": sta}
+                sample = {
+                    "measurement": 'lvaps_handover',
+                    "tags": tags,
+                    "time": timestamp,
+                    "fields": fields
+                }
+                points.append(sample)
+                # save to db
+                self.write_points(points)
+                return True
+            else:
+                return False
+
+    def getSliceLvap(self, sta):
+        query = 'select * from lvap_slice order by time desc limit 1;'
+        resultSlices = self.query(query)
+        lvaps_slice = list(resultSlices.get_points())
+        for lvap_slice in lvaps_slice:
+            hasLvap = -1
+            for key in lvap_slice.keys():
+                if lvap_slice[key] == sta:
+                    hasLvap = key
+                    break
+            if hasLvap != -1:
+                return lvap_slice['slice']
+        return ''
 
     def try_change_quantum(self, sta, slc, rate):
         lvap = self.context.lvaps[EtherAddress(sta)]
