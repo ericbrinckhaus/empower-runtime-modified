@@ -65,7 +65,6 @@ class NetworkManager(EWiFiApp):
 
     def loop(self):
         """Check and update network """
-        self.checkNetworkSlices()
         # initialize wtp handover counter
         self.wtp_handovers = {}
         for wtp in self.context.wtps.values():
@@ -77,6 +76,8 @@ class NetworkManager(EWiFiApp):
             self.change_quantum[slc] = {}
             for wtp in self.context.wtps.values():
                 self.change_quantum[slc][wtp.addr] = False
+
+        self.checkNetworkSlices()
 
     def checkNetworkSlices(self):
         query = 'select * from slices_rates order by time desc limit 1;'
