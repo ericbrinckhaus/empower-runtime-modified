@@ -140,7 +140,7 @@ class NetworkManager(EWiFiApp):
     def changeNetwork(self, sta, slc, rate, ratesProm):
         if (self.try_handover(sta, slc, rate, ratesProm)):
             print('Handover')
-        elif (self.try_change_quantum(sta, slc, rate)):
+        elif (self.try_change_quantum(sta, slc, rate, ratesProm)):
             print('Quantum Change')
         else:
             print('No actions taken, network too busy')
@@ -210,13 +210,7 @@ class NetworkManager(EWiFiApp):
                     if lvap.wtp.addr.to_str() == block.hwaddr.to_str():
                         lvap_slice = self.getSliceLvap(sta2)
                         promised_rate = ratesProm[lvap_slice]
-                        query = 'select * from lvap_counters_stats where sta=\'' + sta2.to_str() + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
-                        result = self.query(query)
-                        lvap_counter_stats = list(result.get_points())
-                        lvap_rate = 0
-                        for lvap_counter in lvap_counter_stats:
-                            lvap_rate += lvap_rate + lvap_counter["tx_bps"]
-                        lvap_rate = lvap_rate / len(lvap_counter_stats)
+                        lvap_rate = self.getLVAPRate(sta2)
                         if (lvap_rate - promised_rate) > 0:
                             extra_rate += (lvap_rate - promised_rate)
                 if extra_rate > 0 and extra_rate >= rate and self.wtp_handovers[block.hwaddr.to_str()] < self.max_handovers and not(self.ping_pong(handover_list, block.hwaddr.to_str())):
@@ -262,7 +256,17 @@ class NetworkManager(EWiFiApp):
                 return lvap_slice['slice']
         return ''
 
-    def try_change_quantum(self, sta, slc, rate):
+    def getLVAPRate(self, sta):
+        query = 'select * from lvap_counters_stats where sta=\'' + sta.to_str() + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
+        result = self.query(query)
+        lvap_counter_stats = list(result.get_points())
+        lvap_rate = 0
+        for lvap_counter in lvap_counter_stats:
+            lvap_rate += lvap_rate + lvap_counter["tx_bps"]
+        lvap_rate = lvap_rate / len(lvap_counter_stats)
+        return lvap_rate
+
+    def try_change_quantum(self, sta, slc, rate, ratesProm):
         lvap = self.context.lvaps[EtherAddress(sta)]
         wtp = lvap.wtp.addr
         actual_slice = self.context.wifi_slices[str(slc)]
@@ -291,47 +295,38 @@ class NetworkManager(EWiFiApp):
             else:
                 updated_slice['devices'][addr]['quantum'] = updated_slice['devices'][addr]['quantum'] + updated_slice['devices'][addr]['quantum']*self.quantum_increase
             # Decrementar los quantum para las slices que estan pasadas del rate prometido en el WTP
-            updated_slice2 = self.decreaseQuantum(slc, wtp, updated_slice)
+            updated_slice2 = self.decreaseQuantum(slc, wtp, updated_slice, ratesProm)
             self.context.upsert_wifi_slice(**updated_slice2)
             return True
         else:
             return False
 
-    def decreaseQuantum(self, slc, wtp, updated_slice):
-        # para todas las slices en el wtp
-        for idx in self.context.wifi_slices:
-            if idx != slc:
-                query = 'select * from wifi_slice_stats where wtp=\'' + wtp.to_str() + '\' and slc=\'' + idx + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
-                result = self.query(query)
-                slice_stats = list(result.get_points())
-                if len(slice_stats) > 0:
-                    query = 'select * from slices_rates order by time desc limit 1;'
-                    resultRates = self.query(query)
-                    if len(list(resultRates.get_points())):
-                        slices = list(resultRates.get_points())[0]
-                        if idx in slices:
-                            rate = slices[idx]
-                            tx_bytes = 0
-                            for stats in slice_stats:
-                                tx_bytes += stats['tx_bytes']
-                            tx_bps = tx_bytes / (self.every/1000)
-                            # si el rate actual es mayor al prometido y el quantum de esa slice en el wtp es mayor al minimo, le saco recursos
-                            if tx_bps > rate:
-                                actual_slice = self.context.wifi_slices[str(idx)]
-                                wtp_quantum = actual_slice.properties['quantum']
-                                if EtherAddress(wtp) in actual_slice.devices:
-                                    wtp_quantum = actual_slice.devices[wtp]['quantum']
-                                if wtp_quantum > self.quantum_min and not(self.change_quantum[slc][wtp]):
-                                    self.change_quantum[slc][wtp] = True
-                                    addr = EtherAddress(wtp)
-                                    if addr not in updated_slice['devices']:
-                                        updated_slice['devices'][addr] = {
-                                            'amsdu_aggregation': updated_slice.properties['amsdu_aggregation'],
-                                            'quantum': updated_slice.properties['quantum'] - updated_slice.properties['quantum']*self.quantum_decrease,
-                                            'sta_scheduler': updated_slice.properties['sta_scheduler']
-                                        }
-                                    else:
-                                        updated_slice['devices'][addr]['quantum'] = updated_slice['devices'][addr]['quantum'] - updated_slice['devices'][addr]['quantum']*self.quantum_decrease
+    def decreaseQuantum(self, slc, wtp, updated_slice, ratesProm):
+        # para todos los lvaps en el wtp
+        for sta in self.context.lvaps:
+            lvap = self.context.lvaps[sta]
+            if lvap.wtp.addr.to_str() == wtp.to_str():
+                lvap_slice = self.getSliceLvap(sta)
+                if not(self.change_quantum[slc][wtp]):
+                    promised_rate = ratesProm[lvap_slice]
+                    lvap_rate = self.getLVAPRate(sta)
+                    # si al menos un lvap tiene mayor rate al prometido y el quantum de esa slice en el wtp es mayor al minimo, le saco recursos
+                    if lvap_rate > promised_rate:
+                        actual_slice = self.context.wifi_slices[str(lvap_slice)]
+                        wtp_quantum = actual_slice.properties['quantum']
+                        if EtherAddress(wtp) in actual_slice.devices:
+                            wtp_quantum = actual_slice.devices[wtp]['quantum']
+                        if wtp_quantum > self.quantum_min:
+                            self.change_quantum[slc][wtp] = True
+                            addr = EtherAddress(wtp)
+                            if addr not in updated_slice['devices']:
+                                updated_slice['devices'][addr] = {
+                                    'amsdu_aggregation': updated_slice.properties['amsdu_aggregation'],
+                                    'quantum': updated_slice.properties['quantum'] - updated_slice.properties['quantum']*self.quantum_decrease,
+                                    'sta_scheduler': updated_slice.properties['sta_scheduler']
+                                }
+                            else:
+                                updated_slice['devices'][addr]['quantum'] = updated_slice['devices'][addr]['quantum'] - updated_slice['devices'][addr]['quantum']*self.quantum_decrease
 
         return updated_slice
 
