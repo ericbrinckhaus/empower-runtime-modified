@@ -34,6 +34,7 @@ points = [
         },
         "time": timestamp,
         "fields": {
+            "slice_id": "0",
             "0": "D8:CE:3A:8F:0B:4D", 
             "1": "6C:C7:EC:98:16:65", 
             "2": "64:66:B3:8A:52:72",
@@ -47,6 +48,7 @@ points = [
     #     },
     #     "time": timestamp,
     #     "fields": {
+    #        "slice_id": "1",
     #         "0": "64:66:B3:8A:52:56"
     #     }
     # }

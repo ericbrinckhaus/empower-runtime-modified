@@ -92,7 +92,7 @@ class NetworkManager(EWiFiApp):
                     lvaps = list(resultSlices.get_points())[0]
                     if len(lvaps):
                         for lvap in lvaps.keys():
-                            if lvap == 'time' or lvap == 'slice' or lvaps[lvap] == None:
+                            if lvap == 'time' or lvap == 'slice' or lvap == 'slice_id' or lvaps[lvap] == None:
                                 continue
                             # do algorithm
                             self.decide(rate, lvaps[lvap], slc, slices)
@@ -254,7 +254,7 @@ class NetworkManager(EWiFiApp):
                     hasLvap = key
                     break
             if hasLvap != -1:
-                return lvap_slice['slice']
+                return lvap_slice['slice_id']
         return ''
 
     def getLVAPRate(self, sta):
