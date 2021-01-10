@@ -42,8 +42,8 @@ class NetworkManager(EWiFiApp):
         # Data structures
         self.threshold = 0.95 #TODO 0.75
         self.RSSI_min = 170 # TODO ver valores de RSSI razonables
-        self.quantum_max = 15000
-        self.quantum_min = 10000
+        self.quantum_max = 15000 # Implica que q maximo va a ser 15000 + 10% = 16500
+        self.quantum_min = 10000 # Implica que q minimo va a ser 10000 - 10% = 9000
         self.quantum_increase = 0.1
         self.quantum_decrease = 0.1
         self.changes = {}
@@ -210,7 +210,7 @@ class NetworkManager(EWiFiApp):
                     if lvap.wtp.addr.to_str() == block.hwaddr.to_str():
                         lvap_slice = self.getSliceLvap(sta2)
                         promised_rate = ratesProm[lvap_slice]
-                        query = 'select * from lvap_counter_stats where sta=\'' + sta2.to_str() + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
+                        query = 'select * from lvap_counters_stats where sta=\'' + sta2.to_str() + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
                         result = self.query(query)
                         lvap_counter_stats = list(result.get_points())
                         lvap_rate = 0
@@ -339,17 +339,15 @@ class NetworkManager(EWiFiApp):
         handovers = list_handovers.copy()
         handovers.reverse()
         res = False
-        if len(list_handovers) > 3:
+        if len(list_handovers) > 2:
             last_app = next((i for i, item in enumerate(handovers) if item["wtp"] == wtp), None)
             if (type(last_app) == int):
-                sec_last_app = next((i for i, item in enumerate(handovers[(last_app+1):]) if item["wtp"] == wtp), None)
-                if (type(sec_last_app) == int):
-                    def wtp_address(x):
-                        return x['wtp']
-                    seq1 = map(wtp_address, handovers[:last_app])
-                    seq2 = map(wtp_address, handovers[(last_app+1):sec_last_app])
-                    if (seq1 == seq2):
-                        res = True
+                def wtp_address(x):
+                    return x['wtp']
+                seq1 = list(map(wtp_address, handovers[:last_app]))
+                seq2 = list(map(wtp_address, handovers[(last_app+1):(last_app*2+1)]))
+                if (seq1 == seq2):
+                    res = True
         return res
 
     # iperf usa Mbits para medir el rate
