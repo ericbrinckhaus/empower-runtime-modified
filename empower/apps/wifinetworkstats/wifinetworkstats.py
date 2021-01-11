@@ -458,6 +458,9 @@ class NetworkStats(EWiFiApp):
         old_tx_packets = self.lvap_counters[sta]["tx_packets"] if sta in self.lvap_counters else 0.0
         old_rx_packets = self.lvap_counters[sta]["rx_packets"] if sta in self.lvap_counters else 0.0
 
+        if not(sta in self.lvap_counters):
+            self.lvap_counters[sta] = {}
+
         self.lvap_counters[sta]["tx_bytes"] = self.fill_bytes_samples(tx_samples)
         self.lvap_counters[sta]["rx_bytes"] = self.fill_bytes_samples(rx_samples)
 
@@ -469,7 +472,7 @@ class NetworkStats(EWiFiApp):
         self.lvap_counters[sta]["tx_pps"] = 0
         self.lvap_counters[sta]["rx_pps"] = 0
 
-        if self.lvap_last[sta]:
+        if sta in self.lvap_last:
 
             delta = time.time() - self.lvap_last[sta]
 
