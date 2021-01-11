@@ -244,7 +244,7 @@ class NetworkManager(EWiFiApp):
                 return False
 
     def getSliceLvap(self, sta):
-        query = 'select * from lvap_slice order by time desc limit 1;'
+        query = 'select * from lvap_slice group by * order by time desc limit 1;'
         resultSlices = self.query(query)
         lvaps_slice = list(resultSlices.get_points())
         for lvap_slice in lvaps_slice:
