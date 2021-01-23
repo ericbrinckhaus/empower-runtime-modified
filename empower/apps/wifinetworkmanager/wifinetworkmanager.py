@@ -2,6 +2,7 @@
 
 import time
 import math
+import json
 
 from datetime import datetime
 
@@ -132,10 +133,13 @@ class NetworkManager(EWiFiApp):
                 if (tx_bps < rate):
                     self.changeNetwork(lvap, slc, rate, ratesProm)
                 else:
+                    self.write_log(slc, lvap, "N", "None", "LVAP + Rate than promised, rate: " + str(tx_bps))
                     print("Lvap {} is trying more bit rate than promised.".format(lvap))
             else:
+                self.write_log(slc, lvap, "N", "None", "LVAP OK, success rate: " + str(success_rate))
                 print("[OK] Lvap {} has success rate of {}.".format(lvap, success_rate))
         else:
+            self.write_log(slc, lvap, "N", "None", "LVAP Idle")
             print("Lvap {} is idle.".format(lvap))
 
     def changeNetwork(self, sta, slc, rate, ratesProm):
@@ -144,6 +148,7 @@ class NetworkManager(EWiFiApp):
         elif (self.try_change_quantum(sta, slc, rate, ratesProm)):
             print('Quantum Change')
         else:
+            self.write_log(slc, lvap, "N", "None", "Network too busy")
             print('No actions taken, network too busy')
     
     def try_handover(self, sta, slc, rate, ratesProm):
@@ -181,6 +186,8 @@ class NetworkManager(EWiFiApp):
         if len(posibles_handovers) > 0:
             # Ordeno los bloques por usage asi me quedo con el que tenga menos
             posibles_handovers.sort(key=lambda x: x['usage'])
+            # escribo en logger
+            self.write_log(slc, sta, "H", lvap.blocks[0].hwaddr.to_str() + "->" + posibles_handovers[0]['block'].hwaddr.to_str(), "Usage new WTP: " + str(posibles_handovers[0]['usage']))
             # Do Handover
             lvap.blocks = posibles_handovers[0]['block']
             self.wtp_handovers[posibles_handovers[0]['block'].hwaddr.to_str()] += 1
@@ -219,6 +226,8 @@ class NetworkManager(EWiFiApp):
             if len(posibles_handovers) > 0:
                 # Ordeno los bloques por rate extra asi me quedo con el que tenga mas
                 posibles_handovers.sort(key=lambda x: x['extra_rate'])
+                # escribo en logger
+                self.write_log(slc, sta, "H", lvap.blocks[0].hwaddr.to_str() + "->" + posibles_handovers[0]['block'].hwaddr.to_str(), "Extra rate new WTP: " + str(posibles_handovers[0]['extra_rate']))
                 # Do Handover
                 lvap.blocks = posibles_handovers[-1]['block']
                 self.wtp_handovers[posibles_handovers[-1]['block'].hwaddr.to_str()] += 1
@@ -298,6 +307,11 @@ class NetworkManager(EWiFiApp):
             # Decrementar los quantum para las slices que estan pasadas del rate prometido en el WTP
             updated_slice2 = self.decreaseQuantum(slc, wtp, updated_slice, ratesProm)
             self.context.upsert_wifi_slice(**updated_slice2)
+            # escribo en logger
+            actual_quantum = actual_slice.properties['quantum']
+            if addr in actual_slice['devices']:
+                actual_quantum = actual_slice['devices'][addr]['quantum']
+            self.write_log(slc, sta, "Q", str(actual_quantum) + "->" + str(updated_slice['devices'][addr]['quantum']), "Slice data after change: " + json.dumps(updated_slice2))
             return True
         else:
             return False
@@ -349,6 +363,14 @@ class NetworkManager(EWiFiApp):
     # iperf usa Mbits para medir el rate
     def to_Mbits(self, byte):
         return byte * 8 / 1000000
+
+    # funcion para escribir en un archivo
+    def write_log(self, slc, lvap, action, desc, stats):
+        file = open("logger.csv", "a")
+        timestamp = datetime.utcnow().strftime('%B %d %Y - %H:%M:%S')
+        line = timestamp + ";" + slc + ";" + lvap + ";" + action + ";" + desc + ";" + stats
+        file.write("\n" + line)
+        file.close()
 
 def launch(context, service_id, every=EVERY):
     """ Initialize the module. """
