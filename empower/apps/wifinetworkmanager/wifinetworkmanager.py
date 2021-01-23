@@ -2,7 +2,6 @@
 
 import time
 import math
-import json
 
 from datetime import datetime
 
@@ -148,7 +147,7 @@ class NetworkManager(EWiFiApp):
         elif (self.try_change_quantum(sta, slc, rate, ratesProm)):
             print('Quantum Change')
         else:
-            self.write_log(slc, lvap, "N", "None", "Network too busy")
+            self.write_log(slc, sta, "N", "None", "Network too busy")
             print('No actions taken, network too busy')
     
     def try_handover(self, sta, slc, rate, ratesProm):
@@ -156,7 +155,7 @@ class NetworkManager(EWiFiApp):
         lvap = self.context.lvaps[EtherAddress(sta)]
         blocks = self.blocks().sort_by_rssi(lvap.addr)
         def filterBlocks(block):
-            if block.ucqm[lvap.addr]['mov_rssi'] > self.RSSI_min:
+            if block.ucqm[lvap.addr]['mov_rssi'] > self.RSSI_min and block.hwaddr.to_str() != lvap.blocks[0].hwaddr.to_str():
                 return True
             else:
                 return False
@@ -297,26 +296,26 @@ class NetworkManager(EWiFiApp):
             }
             addr = EtherAddress(wtp)
             if addr not in updated_slice['devices']:
+                actual_quantum = actual_slice.properties['quantum']
                 updated_slice['devices'][addr] = {
                     'amsdu_aggregation': actual_slice.properties['amsdu_aggregation'],
                     'quantum': actual_slice.properties['quantum'] + actual_slice.properties['quantum']*self.quantum_increase,
                     'sta_scheduler': actual_slice.properties['sta_scheduler']
                 }
             else:
+                actual_quantum = updated_slice['devices'][addr]['quantum']
                 updated_slice['devices'][addr]['quantum'] = updated_slice['devices'][addr]['quantum'] + updated_slice['devices'][addr]['quantum']*self.quantum_increase
             # Decrementar los quantum para las slices que estan pasadas del rate prometido en el WTP
             updated_slice2 = self.decreaseQuantum(slc, wtp, updated_slice, ratesProm)
             self.context.upsert_wifi_slice(**updated_slice2)
             # escribo en logger
-            actual_quantum = actual_slice.properties['quantum']
-            if addr in actual_slice['devices']:
-                actual_quantum = actual_slice['devices'][addr]['quantum']
-            self.write_log(slc, sta, "Q", str(actual_quantum) + "->" + str(updated_slice['devices'][addr]['quantum']), "Slice data after change: " + json.dumps(updated_slice2))
+            self.write_log(slc, sta, "Q", lvap.blocks[0].hwaddr.to_str() + "::" + str(actual_quantum) + "->" + str(updated_slice['devices'][addr]['quantum']), "Decrease quantums: " + self.decreased_quantums)
             return True
         else:
             return False
 
     def decreaseQuantum(self, slc, wtp, updated_slice, ratesProm):
+        self.decreased_quantums = ""
         # para todos los lvaps en el wtp
         for sta in self.context.lvaps:
             lvap = self.context.lvaps[sta]
@@ -335,12 +334,14 @@ class NetworkManager(EWiFiApp):
                             self.change_quantum[slc][wtp] = True
                             addr = EtherAddress(wtp)
                             if addr not in updated_slice['devices']:
+                                self.decreased_quantums = self.decreased_quantums + "// S-" + slc + "--" + updated_slice.properties['quantum'] + "->" + updated_slice.properties['quantum'] - updated_slice.properties['quantum']*self.quantum_decrease
                                 updated_slice['devices'][addr] = {
                                     'amsdu_aggregation': updated_slice.properties['amsdu_aggregation'],
                                     'quantum': updated_slice.properties['quantum'] - updated_slice.properties['quantum']*self.quantum_decrease,
                                     'sta_scheduler': updated_slice.properties['sta_scheduler']
                                 }
                             else:
+                                self.decreased_quantums = self.decreased_quantums + "// S-" + slc + "--" + updated_slice['devices'][addr]['quantum'] + "->" + updated_slice['devices'][addr]['quantum'] - updated_slice['devices'][addr]['quantum']*self.quantum_decrease
                                 updated_slice['devices'][addr]['quantum'] = updated_slice['devices'][addr]['quantum'] - updated_slice['devices'][addr]['quantum']*self.quantum_decrease
 
         return updated_slice
