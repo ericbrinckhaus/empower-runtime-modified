@@ -118,7 +118,7 @@ class NetworkManager(EWiFiApp):
             total_last_attempts += rates["last_attempts"]
             total_last_successes += rates["last_successes"]
         # calculo exitos sobre intentos totales
-        if total_last_attempts > 0:
+        if total_last_attempts > 50: # si intento menos de 50 tomo como si estuviera idle porque es muy poco
             success_rate = total_last_successes / total_last_attempts
             if success_rate < self.threshold:
                 query = 'select * from lvap_counters_stats where sta=\'' + lvap + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
