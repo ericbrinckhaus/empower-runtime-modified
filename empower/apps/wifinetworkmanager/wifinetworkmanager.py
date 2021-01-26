@@ -316,6 +316,7 @@ class NetworkManager(EWiFiApp):
 
     def decreaseQuantum(self, slc, wtp, ratesProm):
         self.decreased_quantums = ""
+        updated_slice = {}
         # para todos los lvaps en el wtp
         for sta in self.context.lvaps:
             lvap = self.context.lvaps[sta]

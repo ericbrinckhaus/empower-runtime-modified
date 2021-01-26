@@ -472,7 +472,7 @@ class NetworkStats(EWiFiApp):
         self.lvap_counters[sta]["tx_pps"] = 0
         self.lvap_counters[sta]["rx_pps"] = 0
 
-        if sta in self.lvap_last:
+        if sta in self.lvap_last and self.lvap_last[sta] != None:
 
             delta = time.time() - self.lvap_last[sta]
 
