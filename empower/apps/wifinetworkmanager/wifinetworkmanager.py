@@ -168,6 +168,7 @@ class NetworkManager(EWiFiApp):
         current_usage = 0
         for current_stats in current_channel_stats:
             current_usage += current_stats['tx'] # + current_stats['rx'] + current_stats['ed']
+        current_usage = current_usage / len(current_channel_stats)
         # obtengo historial de handovers para verificar ping pong
         query = 'select * from lvaps_handover where sta=\'' + sta + '\' and time > now() - ' + str(int(self.every/1000)*10) + 's;'
         result = self.query(query)
@@ -179,6 +180,7 @@ class NetworkManager(EWiFiApp):
             usage = 0
             for stats in channel_stats:
                 usage += stats['tx'] #+ stats['rx'] + stats['ed']
+            usage = usage / len(channel_stats)
             # si el uso del wtp es menor al actual, lo agrego como posible handover
             if usage < current_usage and self.wtp_handovers[block.hwaddr.to_str()] < self.max_handovers and not(self.ping_pong(handover_list, block.hwaddr.to_str())):
                 posibles_handovers.append({'block':block, 'usage':usage})
