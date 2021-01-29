@@ -748,14 +748,17 @@ class NetworkStats(EWiFiApp):
         block_id = response.iface_id
 
         # init data structures for the incoming block
-        if block_id not in self.channel_stats:
-            self.channel_stats[block_id] = {}
-            self.agent_ts_ref[block_id] = 0
-            self.runtime_ts_ref[block_id] = None
+        if wtp.addr not in self.channel_stats:
+            self.channel_stats[wtp.addr] = {}
+            self.agent_ts_ref[wtp.addr] = {}
+            self.agent_ts_ref[wtp.addr] = {}
+        if block_id not in self.channel_stats[wtp.addr]:
+            self.channel_stats[wtp.addr].[block_id] = {}
+            self.agent_ts_ref[wtp.addr].[block_id] = 0
+            self.runtime_ts_ref[wtp.addr].[block_id] = None
 
         # pre-processing: ed = ed - (rx + tx)
         # tx: 0:100, rx: 100:200, ed: 200:300
-        # TODO ver si hay que usar esto o no
         for index in range(200, 300):
             response.entries[index].sample -= \
                 response.entries[index - 100].sample + \
@@ -765,19 +768,19 @@ class NetworkStats(EWiFiApp):
         # entry[0] = stat type [0, 1, 2] -> [tx, rx, ed]
         # entry[1] = agent timestamp
         # entry[2] = stat value
-        if self.agent_ts_ref[block_id] == 0:
+        if self.agent_ts_ref[wtp.addr].[block_id] == 0:
             for entry in response.entries:
-                if entry.timestamp > self.agent_ts_ref[block_id]:
-                    self.agent_ts_ref[block_id] = entry.timestamp
-            self.runtime_ts_ref[block_id] = datetime.utcnow()
+                if entry.timestamp > self.agent_ts_ref[wtp.addr].[block_id]:
+                    self.agent_ts_ref[wtp.addr].[block_id] = entry.timestamp
+            self.runtime_ts_ref[wtp.addr].[block_id] = datetime.utcnow()
 
-        self.channel_stats[block_id] = []
+        self.channel_stats[wtp.addr].[block_id] = []
 
         for entry in response.entries:
 
             stat_type = ["tx", "rx", "ed"][entry.type]
             ts_delta = timedelta(microseconds=(entry.timestamp -
-                                               self.agent_ts_ref[block_id]))
+                                               self.agent_ts_ref[wtp.addr].[block_id]))
             value = entry.sample / 180.0
 
             # skip invalid samples
@@ -787,15 +790,15 @@ class NetworkStats(EWiFiApp):
 
             sample = {
                 "type": stat_type,
-                "time": self.runtime_ts_ref[block_id] + ts_delta,
+                "time": self.runtime_ts_ref[wtp.addr].[block_id] + ts_delta,
                 "value": value
             }
 
-            self.channel_stats[block_id].append(sample)
+            self.channel_stats[wtp.addr].[block_id].append(sample)
 
         # update wifi_stats module
         block = wtp.blocks[block_id]
-        block.channel_stats = self.channel_stats[block_id]
+        block.channel_stats = self.channel_stats[wtp.addr].[block_id]
 
         # save samples
         sorted_samples = sorted(block.channel_stats,
