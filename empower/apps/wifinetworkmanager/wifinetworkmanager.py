@@ -162,7 +162,7 @@ class NetworkManager(EWiFiApp):
         # Filtramos los wtp que tengan malo RSSI
         filtered_blocks = list(filter(filterBlocks, blocks))
         # obtengo el uso del wtp actual
-        query = 'select * from wifi_channel_stats where wtp=\'' + lvap.wtp.addr + '\' and block_id=\'' + str(lvap.blocks[0].block_id) + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
+        query = 'select * from wifi_channel_stats where wtp=\'' + lvap.wtp.addr.to_str() + '\' and block_id=\'' + str(lvap.blocks[0].block_id) + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
         result = self.query(query)
         current_channel_stats = list(result.get_points())
         current_usage = 0
@@ -174,7 +174,7 @@ class NetworkManager(EWiFiApp):
         result = self.query(query)
         handover_list = list(result.get_points())
         for block in filtered_blocks:
-            query = 'select * from wifi_channel_stats where wtp=\'' + block.wtp.addr + '\' and block_id=\'' + str(block.block_id) + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
+            query = 'select * from wifi_channel_stats where wtp=\'' + block.wtp.addr.to_str() + '\' and block_id=\'' + str(block.block_id) + '\' and time > now() - ' + str(int(self.every/1000)) + 's;'
             result = self.query(query)
             channel_stats = list(result.get_points())
             usage = 0
@@ -188,7 +188,7 @@ class NetworkManager(EWiFiApp):
             # Ordeno los bloques por usage asi me quedo con el que tenga menos
             posibles_handovers.sort(key=lambda x: x['usage'])
             # escribo en logger
-            self.write_log(slc, sta, "H", lvap.blocks[0].wtp.addr + "->" + posibles_handovers[0]['block'].wtp.addr, "Usage new WTP: " + str(posibles_handovers[0]['usage']))
+            self.write_log(slc, sta, "H", lvap.blocks[0].wtp.addr.to_str() + "->" + posibles_handovers[0]['block'].wtp.addr.to_str(), "Usage new WTP: " + str(posibles_handovers[0]['usage']))
             # Do Handover
             lvap.blocks = posibles_handovers[0]['block']
             self.wtp_handovers[posibles_handovers[0]['block'].wtp.addr] += 1
@@ -228,7 +228,7 @@ class NetworkManager(EWiFiApp):
                 # Ordeno los bloques por rate extra asi me quedo con el que tenga mas
                 posibles_handovers.sort(key=lambda x: x['extra_rate'])
                 # escribo en logger
-                self.write_log(slc, sta, "H", lvap.blocks[0].wtp.addr + "->" + posibles_handovers[0]['block'].wtp.addr, "Extra rate new WTP: " + str(posibles_handovers[0]['extra_rate']))
+                self.write_log(slc, sta, "H", lvap.blocks[0].wtp.addr.to_str() + "->" + posibles_handovers[0]['block'].wtp.addr.to_str(), "Extra rate new WTP: " + str(posibles_handovers[0]['extra_rate']))
                 # Do Handover
                 lvap.blocks = posibles_handovers[-1]['block']
                 self.wtp_handovers[posibles_handovers[-1]['block'].wtp.addr] += 1
@@ -311,7 +311,7 @@ class NetworkManager(EWiFiApp):
             # Decrementar los quantum para las slices que estan pasadas del rate prometido en el WTP
             self.decreaseQuantum(slc, wtp, ratesProm)
             # escribo en logger
-            self.write_log(slc, sta, "Q", lvap.blocks[0].wtp.addr + "::" + str(actual_quantum) + "->" + str(updated_slice['devices'][addr]['quantum']), "Decrease quantums: " + self.decreased_quantums)
+            self.write_log(slc, sta, "Q", lvap.blocks[0].wtp.addr.to_str() + "::" + str(actual_quantum) + "->" + str(updated_slice['devices'][addr]['quantum']), "Decrease quantums: " + self.decreased_quantums)
             return True
         else:
             return False
