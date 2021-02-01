@@ -825,10 +825,27 @@ class NetworkStats(EWiFiApp):
             }
             samples.append(sample)
 
+            # LOGGER
+            if not(wtp.addr in self.usage_logger):
+                self.usage_logger[wtp.addr] = {}
+            if not(block_id in self.usage_logger[wtp.addr]):
+                self.usage_logger[wtp.addr][block_id] = 0
+            if self.usage_logger[wtp.addr][block_id] < tstamp:
+                self.usage_logger[wtp.addr][block_id] = tstamp
+                self.write_log_usage(tstamp, wtp.addr, block_id, fields["tx"])
+
         self.write_points(samples)
 
         # handle callbacks
         self.handle_callbacks()
+
+    # funcion para escribir en un archivo uso del WTP
+    def write_log_usage(self, ts, wtp, block_id, usage):
+        file = open("usage_logger.csv", "a")
+        timestamp = datetime.fromtimestamp(ts)
+        line = timestamp + ";" + wtp + ";" + block_id + ";" + usage
+        file.write("\n" + line)
+        file.close()
 
 def launch(context, service_id, every=EVERY):
     """ Initialize the module. """

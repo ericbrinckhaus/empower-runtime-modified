@@ -79,6 +79,9 @@ class NetworkManager(EWiFiApp):
 
         self.checkNetworkSlices()
 
+        # LOGGER quantums
+        self.write_log_quantum()
+
     def checkNetworkSlices(self):
         query = 'select * from slices_rates order by time desc limit 1;'
         resultRates = self.query(query)
@@ -379,10 +382,25 @@ class NetworkManager(EWiFiApp):
 
     # funcion para escribir en un archivo
     def write_log(self, slc, lvap, action, desc, stats):
-        file = open("logger.csv", "a")
+        file = open("actions_logger.csv", "a")
         timestamp = datetime.utcnow().strftime('%B %d %Y - %H:%M:%S')
         line = timestamp + ";" + slc + ";" + lvap + ";" + action + ";" + desc + ";" + stats
         file.write("\n" + line)
+        file.close()
+
+    # funcion para escribir en un archivo el quantum de un slice en wtps
+    def write_log_quantum(self):
+        file = open("quantum_logger.csv", "a")
+        timestamp = datetime.utcnow().strftime('%B %d %Y - %H:%M:%S')
+        for slc in self.context.wifi_slices:
+            quantum = slc.properties["quantum"]
+            for wtp in self.context.wtps.values():
+                if wtp.addr in slc.devices:
+                    q = slc.devices[wtp.addr]["quantum"]
+                else:
+                    q = quantum
+                line = timestamp + ";" + wtp + ";" + slc.slice_id + ";" + q
+                file.write("\n" + line)
         file.close()
 
 def launch(context, service_id, every=EVERY):
