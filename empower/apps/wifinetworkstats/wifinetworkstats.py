@@ -300,6 +300,8 @@ class NetworkStats(EWiFiApp):
         # Fix duplicate response bug
         self.wcs_seqid = 0
 
+        self.usage_logger = {}
+
     def __eq__(self, other):
         if isinstance(other, NetworkStats):
             return self.every == other.every
@@ -842,8 +844,8 @@ class NetworkStats(EWiFiApp):
     # funcion para escribir en un archivo uso del WTP
     def write_log_usage(self, ts, wtp, block_id, usage):
         file = open("usage_logger.csv", "a")
-        timestamp = datetime.fromtimestamp(ts)
-        line = timestamp + ";" + wtp + ";" + block_id + ";" + usage
+        timestamp = datetime.fromtimestamp(ts).strftime('%B %d %Y - %H:%M:%S')
+        line = timestamp + ";" + wtp.to_str() + ";" + str(block_id) + ";" + str(usage)
         file.write("\n" + line)
         file.close()
 

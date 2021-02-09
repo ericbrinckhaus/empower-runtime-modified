@@ -392,14 +392,15 @@ class NetworkManager(EWiFiApp):
     def write_log_quantum(self):
         file = open("quantum_logger.csv", "a")
         timestamp = datetime.utcnow().strftime('%B %d %Y - %H:%M:%S')
-        for slc in self.context.wifi_slices:
+        for idx in self.context.wifi_slices:
+            slc = self.context.wifi_slices[idx]
             quantum = slc.properties["quantum"]
             for wtp in self.context.wtps.values():
                 if wtp.addr in slc.devices:
                     q = slc.devices[wtp.addr]["quantum"]
                 else:
                     q = quantum
-                line = timestamp + ";" + wtp + ";" + slc.slice_id + ";" + q
+                line = timestamp + ";" + wtp.addr.to_str() + ";" + str(slc.slice_id) + ";" + str(q)
                 file.write("\n" + line)
         file.close()
 
