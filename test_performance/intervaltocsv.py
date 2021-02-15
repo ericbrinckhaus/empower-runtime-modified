@@ -17,7 +17,7 @@ def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
 def main():
-    global db
+    global minStart
     """main program"""
 
     csv.register_dialect('iperf3log', delimiter=',', quoting=csv.QUOTE_MINIMAL)
@@ -31,7 +31,7 @@ def main():
             sys.exit(0)
 
     # accummulate volume per ip in a dict
-    db = {}
+    minStart = 0
     
     # highly specific json parser
     # assumes top { } pair are in single line
@@ -59,7 +59,7 @@ def main():
                 #print("bogus at line %d = %s",i,line)
 
 def process(js,csvwriter):
-    global db
+    global minStart
     #print(js)
     try:
         obj = json.loads(js)
@@ -70,22 +70,25 @@ def process(js,csvwriter):
     try:
         # caveat: assumes multiple streams are all from same IP so we take the 1st one
         # todo: handle errors and missing elements
-        ip = obj["start"]["connected"][0]["remote_host"]
-        local_port = obj["start"]["connected"][0]["local_port"]
-        remote_port = obj["start"]["connected"][0]["remote_port"]
 
-        packets = obj["end"]["sum"]["packets"]
-        lost_packets = obj["end"]["sum"]["lost_packets"]
-        lost_percent = obj["end"]["sum"]["lost_percent"]
+        ts = obj["start"]["timestamp"]["time"].replace(',', '.')
+        timesecs = obj["start"]["timestamp"]["timesecs"]
 
-        reverse = obj["start"]["test_start"]["reverse"]
-        time = (obj["start"]["timestamp"]["time"]).encode('ascii', 'ignore')
-        cookie = (obj["start"]["cookie"]).encode('ascii', 'ignore')
-        protocol = (obj["start"]["test_start"]["protocol"]).encode('ascii', 'ignore')
-        duration = obj["start"]["test_start"]["duration"]
-        num_streams = obj["start"]["test_start"]["num_streams"]
+        for interval in obj["intervals"]:
 
-        csvwriter.writerow([time, ip, local_port, remote_port, duration, protocol, num_streams, cookie, packets, lost_packets, lost_percent])
+            start2 = interval["sum"]["start"]
+            if minStart == 0:
+                minStart = timesecs
+            start2 = start2 + timesecs - minStart
+            start = interval["sum"]["start"]
+            end = interval["sum"]["end"]
+            z_bytes = interval["sum"]["bytes"]
+            bps = interval["sum"]["bits_per_second"]
+            packets = interval["sum"]["packets"]
+            lost_packets = interval["sum"]["lost_packets"]
+            lost_percent = interval["sum"]["lost_percent"]
+
+            csvwriter.writerow([ts, start2, start, end, z_bytes, bps, packets, lost_packets, lost_percent])
         return True
     except:
        eprint("error or bogus test:", sys.exc_info()[0])
