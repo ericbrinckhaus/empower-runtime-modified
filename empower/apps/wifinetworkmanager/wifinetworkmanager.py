@@ -286,7 +286,8 @@ class NetworkManager(EWiFiApp):
                 indexs[rates["rate"]] = 1
             commits = indexs[rates["rate"]]
             total_last_successes += rates["last_successes"]
-        total_last_successes = total_last_successes / commits
+        if commits > 0:
+            total_last_successes = total_last_successes / commits
         # 1500 bytes es el tamano de paquetes que manda WiFi
         # TODO cambiar esta cuenta
         lvap_rate = total_last_successes * 8 * 1500 * 2 / 1000000 # MBits
