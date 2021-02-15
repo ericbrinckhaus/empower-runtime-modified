@@ -113,12 +113,13 @@ class NetworkManager(EWiFiApp):
         result = self.query(query)
         counters = list(result.get_points())
         tx_bps = 0
-        for counter in counters:
-            tx_bps += counter["tx_bps"]
-        tx_bps = tx_bps / len(counters)
-        tx_bps = self.to_Mbits(tx_bps)
+        if len(counters) > 0:
+            for counter in counters:
+                tx_bps += counter["tx_bps"]
+            tx_bps = tx_bps / len(counters)
+            tx_bps = self.to_Mbits(tx_bps)
         # Si el rate que intento es no mas grande que 0.1 MBits entonces considero que esta idle
-        if tx_bps < 0.1: 
+        if tx_bps > 0.1: 
             # Si la diferencia entre rate intentado y rate actual es mayor al 10% del rate intentado
             if tx_bps - actual_rate > tx_bps * 0.1:
                 if actual_rate < rate:
@@ -211,7 +212,7 @@ class NetworkManager(EWiFiApp):
                     if lvap.wtp != None and lvap.wtp.addr == block.wtp.addr:
                         lvap_slice = self.getSliceLvap(sta2)
                         promised_rate = ratesProm[lvap_slice]
-                        lvap_rate = self.getLVAPRateMBits(sta2)
+                        lvap_rate = self.getLVAPRateMBits(sta2.to_str())
                         if (lvap_rate - promised_rate) > 0:
                             extra_rate += (lvap_rate - promised_rate)
                 if extra_rate > 0 and extra_rate >= rate and self.wtp_handovers[block.wtp.addr] < self.max_handovers and not(self.ping_pong(handover_list, block.wtp.addr)):
@@ -276,8 +277,16 @@ class NetworkManager(EWiFiApp):
         rates_list = list(result.get_points())
         # sumo todos los last_successes
         total_last_successes = 0
+        indexs = {}
+        commits = 0
         for rates in rates_list:
+            if rates["rate"] in indexs:
+                indexs[rates["rate"]] += 1
+            else:
+                indexs[rates["rate"]] = 1
+            commits = indexs[rates["rate"]]
             total_last_successes += rates["last_successes"]
+        total_last_successes = total_last_successes / commits
         # 1500 bytes es el tamano de paquetes que manda WiFi
         # TODO cambiar esta cuenta
         lvap_rate = total_last_successes * 8 * 1500 * 2 / 1000000 # MBits
@@ -332,7 +341,7 @@ class NetworkManager(EWiFiApp):
                 lvap_slice = self.getSliceLvap(sta)
                 if not(self.change_quantum[lvap_slice][wtp]):
                     promised_rate = ratesProm[lvap_slice]
-                    lvap_rate = self.getLVAPRateMBits(sta)
+                    lvap_rate = self.getLVAPRateMBits(sta.to_str())
                     # si al menos un lvap tiene mayor rate al prometido y el quantum de esa slice en el wtp es mayor al minimo, le saco recursos
                     if lvap_rate > promised_rate:
                         actual_slice = self.context.wifi_slices[str(lvap_slice)]
