@@ -288,9 +288,9 @@ class NetworkManager(EWiFiApp):
             total_last_successes += rates["last_successes"]
         if commits > 0:
             total_last_successes = total_last_successes / commits
-        # 1500 bytes es el tamano de paquetes que manda WiFi
-        # TODO cambiar esta cuenta
-        lvap_rate = total_last_successes * 8 * 1500 * 2 / 1000000 # MBits
+        # 1448 bytes es el tamano de paquetes que manda iperf por WiFi, con cabezales es 1490
+        # Las stats calculan el last_success cada 0.5 segundos, por eso multiplicamos por 2
+        lvap_rate = total_last_successes * 8 * 1448 * 2 / 1000000 # MBits
         return lvap_rate
 
     def try_change_quantum(self, sta, slc, rate, ratesProm):
