@@ -13,7 +13,7 @@ client = InfluxDBClient(host='localhost',
 client.create_database('empower')
 
 timestamp = datetime.utcnow()
-# slices_rates : <id_slice>: <rate>
+# slices_rates : <id_slice>: <rate> (rate en MBits/s)
 # lvap_slice : 
 #   para cada slice generar un punto, con tag slice igual al id de la slice
 #   en campos poner los lvaps: <numero>: <lvap> donde numero no se puede repetir
@@ -23,8 +23,10 @@ points = [
         "tags": {},
         "time": timestamp,
         "fields": {
-            "0": 200000000.0, # para que siempre de por debajo del prometido
-            "1": 1.0
+            "0": 2.0,
+            "1": 5.0,
+            "2": 10.0,
+            "3": 15.0
         }
     },
     {
@@ -35,24 +37,45 @@ points = [
         "time": timestamp,
         "fields": {
             "slice_id": "0",
-            "0": "D8:CE:3A:8F:0B:4D", 
-            "1": "6C:C7:EC:98:16:65", 
-            "2": "64:66:B3:8A:52:72",
-            "3": "64:66:B3:8A:52:56"
+            #"0": "D8:CE:3A:8F:0B:4D", 
+            #"1": "6C:C7:EC:98:16:65", 
+            "0": "64:66:B3:8A:52:72"
+            #"3": "64:66:B3:8A:52:56"
+        }
+    },
+    {
+        "measurement": "lvap_slice",
+        "tags": {
+            "slice": "1"
+        },
+        "time": timestamp,
+        "fields": {
+            "slice_id": "1",
+            "0": "64:66:B3:8A:52:56"
+        }
+    },
+    {
+        "measurement": "lvap_slice",
+        "tags": {
+            "slice": "2"
+        },
+        "time": timestamp,
+        "fields": {
+            "slice_id": "2",
+            "0": "64:66:B3:8A:42:52"
+        }
+    },
+    {
+        "measurement": "lvap_slice",
+        "tags": {
+            "slice": "3"
+        },
+        "time": timestamp,
+        "fields": {
+            "slice_id": "3",
+            "0": "64:66:B3:D9:93:44"
         }
     }
-    # {
-    #     "measurement": "lvap_slice",
-    #     "tags": {
-    #         "slice": "1"
-    #     },
-    #     "time": timestamp,
-    #     "fields": {
-    #        "slice_id": "1",
-    #         "0": "64:66:B3:8A:52:56",
-    #         "1": "64:66:B3:8A:52:72"
-    #     }
-    # }
 ]
 
 client.write_points(points)

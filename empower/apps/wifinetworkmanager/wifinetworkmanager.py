@@ -43,7 +43,7 @@ class NetworkManager(EWiFiApp):
         self.threshold = 0.95 #TODO 0.75
         self.RSSI_min = 170 # TODO ver valores de RSSI razonables
         self.quantum_max = 15000 # Implica que q maximo va a ser 15000 + 10% = 16500
-        self.quantum_min = 10000 # Implica que q minimo va a ser 10000 - 10% = 9000
+        self.quantum_min = 5000 # Implica que q minimo va a ser 5000 - 10% = 4500
         self.quantum_increase = 0.1
         self.quantum_decrease = 0.1
         self.changes = {}
@@ -123,7 +123,7 @@ class NetworkManager(EWiFiApp):
             # Si la diferencia entre rate intentado y rate actual es mayor al 10% del rate intentado
             if tx_bps - actual_rate > tx_bps * 0.1:
                 if actual_rate < rate:
-                    self.changeNetwork(lvap, slc, rate, ratesProm)
+                    self.changeNetwork(lvap, slc, rate, ratesProm, actual_rate)
                 else:
                     self.write_log(slc, lvap, "N", "None", "LVAP + Rate than promised, rate: " + str(actual_rate))
                     print("Lvap {} is having more bit rate than promised.".format(lvap))
@@ -134,8 +134,8 @@ class NetworkManager(EWiFiApp):
             self.write_log(slc, lvap, "N", "None", "LVAP Idle")
             print("Lvap {} is idle.".format(lvap))
 
-    def changeNetwork(self, sta, slc, rate, ratesProm):
-        if (self.try_handover(sta, slc, rate, ratesProm)):
+    def changeNetwork(self, sta, slc, rate, ratesProm, actual_rate):
+        if (self.try_handover(sta, slc, rate, ratesProm, actual_rate)):
             print('Handover')
         elif (self.try_change_quantum(sta, slc, rate, ratesProm)):
             print('Quantum Change')
@@ -143,7 +143,7 @@ class NetworkManager(EWiFiApp):
             self.write_log(slc, sta, "N", "None", "Network too busy")
             print('No actions taken, network too busy')
     
-    def try_handover(self, sta, slc, rate, ratesProm):
+    def try_handover(self, sta, slc, rate, ratesProm, actual_rate):
         posibles_handovers = []
         lvap = self.context.lvaps[EtherAddress(sta)]
         blocks = self.blocks().sort_by_rssi(lvap.addr)
@@ -175,7 +175,7 @@ class NetworkManager(EWiFiApp):
                 usage += stats['tx'] #+ stats['rx'] + stats['ed']
             usage = usage / len(channel_stats)
             # si el uso del wtp es menor al actual, lo agrego como posible handover
-            if usage < current_usage and self.wtp_handovers[block.wtp.addr] < self.max_handovers and not(self.ping_pong(handover_list, block.wtp.addr)):
+            if usage*1.1 < current_usage and self.wtp_handovers[block.wtp.addr] < self.max_handovers and not(self.ping_pong(handover_list, block.wtp.addr)):
                 posibles_handovers.append({'block':block, 'usage':usage})
         if len(posibles_handovers) > 0:
             # Ordeno los bloques por usage asi me quedo con el que tenga menos
@@ -215,7 +215,7 @@ class NetworkManager(EWiFiApp):
                         lvap_rate = self.getLVAPRateMBits(sta2.to_str())
                         if (lvap_rate - promised_rate) > 0:
                             extra_rate += (lvap_rate - promised_rate)
-                if extra_rate > 0 and extra_rate >= rate and self.wtp_handovers[block.wtp.addr] < self.max_handovers and not(self.ping_pong(handover_list, block.wtp.addr)):
+                if extra_rate > 0 and (extra_rate >= (actual_rate*1.2) or extra_rate >= rate) and self.wtp_handovers[block.wtp.addr] < self.max_handovers and not(self.ping_pong(handover_list, block.wtp.addr)):
                     posibles_handovers.append({'block':block, 'extra_rate':extra_rate})
             if len(posibles_handovers) > 0:
                 # Ordeno los bloques por rate extra asi me quedo con el que tenga mas
@@ -329,10 +329,15 @@ class NetworkManager(EWiFiApp):
             # escribo en logger
             self.write_log(slc, sta, "Q", lvap.blocks[0].wtp.addr.to_str() + "::" + str(actual_quantum) + "->" + str(updated_slice['devices'][addr]['quantum']), "Decrease quantums: " + self.decreased_quantums)
             return True
+        elif self.decreaseQuantum(slc, wtp, ratesProm):
+            # escribo en logger
+            self.write_log(slc, sta, "Q", "No upgrade", "Decrease quantums: " + self.decreased_quantums)
+            return True
         else:
             return False
 
     def decreaseQuantum(self, slc, wtp, ratesProm):
+        res = False
         self.decreased_quantums = ""
         updated_slice = {}
         # para todos los lvaps en el wtp
@@ -350,6 +355,7 @@ class NetworkManager(EWiFiApp):
                         if EtherAddress(wtp) in actual_slice.devices:
                             wtp_quantum = actual_slice.devices[wtp]['quantum']
                         if wtp_quantum > self.quantum_min:
+                            res = True
                             self.change_quantum[lvap_slice][wtp] = True
                             updated_slice = {
                                 'slice_id': actual_slice.slice_id,
@@ -372,7 +378,8 @@ class NetworkManager(EWiFiApp):
                                 self.decreased_quantums = self.decreased_quantums + "// S-" + lvap_slice + "--" + str(updated_slice['devices'][addr]['quantum']) + "->" + str(updated_slice['devices'][addr]['quantum'] - updated_slice['devices'][addr]['quantum']*self.quantum_decrease)
                                 updated_slice['devices'][addr]['quantum'] = updated_slice['devices'][addr]['quantum'] - updated_slice['devices'][addr]['quantum']*self.quantum_decrease
                             self.context.upsert_wifi_slice(**updated_slice)
-        return updated_slice
+        #return updated_slice
+        return res
 
     def ping_pong(self, list_handovers, wtp):
         handovers = list_handovers.copy()
