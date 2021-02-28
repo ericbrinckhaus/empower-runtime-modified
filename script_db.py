@@ -23,24 +23,10 @@ points = [
         "tags": {},
         "time": timestamp,
         "fields": {
-            "0": 2.0,
-            "1": 5.0,
-            "2": 10.0,
-            "3": 15.0
-        }
-    },
-    {
-        "measurement": "lvap_slice",
-        "tags": {
-            "slice": "0"
-        },
-        "time": timestamp,
-        "fields": {
-            "slice_id": "0",
-            #"0": "D8:CE:3A:8F:0B:4D", 
-            #"1": "6C:C7:EC:98:16:65", 
-            "0": "64:66:B3:8A:52:72"
-            #"3": "64:66:B3:8A:52:56"
+            "1": 2.0,
+            "2": 5.0,
+            "3": 10.0,
+            "4": 15.0
         }
     },
     {
@@ -51,7 +37,10 @@ points = [
         "time": timestamp,
         "fields": {
             "slice_id": "1",
-            "0": "64:66:B3:8A:52:56"
+            #"0": "D8:CE:3A:8F:0B:4D", 
+            #"1": "6C:C7:EC:98:16:65", 
+            "0": "64:66:B3:8A:52:72"
+            #"3": "64:66:B3:8A:52:56"
         }
     },
     {
@@ -62,7 +51,7 @@ points = [
         "time": timestamp,
         "fields": {
             "slice_id": "2",
-            "0": "64:66:B3:8A:42:52"
+            "0": "64:66:B3:8A:52:56"
         }
     },
     {
@@ -73,6 +62,17 @@ points = [
         "time": timestamp,
         "fields": {
             "slice_id": "3",
+            "0": "64:66:B3:8A:42:52"
+        }
+    },
+    {
+        "measurement": "lvap_slice",
+        "tags": {
+            "slice": "4"
+        },
+        "time": timestamp,
+        "fields": {
+            "slice_id": "4",
             "0": "64:66:B3:D9:93:44"
         }
     }

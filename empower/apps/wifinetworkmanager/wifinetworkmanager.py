@@ -89,6 +89,8 @@ class NetworkManager(EWiFiApp):
             slices = list(resultRates.get_points())[0]
             for slc in slices.keys():
                 rate = slices[slc]
+                if not(isinstance(rate, float)):
+                    continue
                 query = 'select * from lvap_slice where slice=\'' + slc + '\' order by time desc limit 1;'
                 resultSlices = self.query(query)
                 if len(list(resultSlices.get_points())):
